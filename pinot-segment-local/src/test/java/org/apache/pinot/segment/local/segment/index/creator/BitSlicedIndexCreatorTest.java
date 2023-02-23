@@ -171,12 +171,9 @@ public class BitSlicedIndexCreatorTest {
       }
       testRange(reader, dataset, prev, prev + 1);
       testRange(reader, dataset, prev + 1, prev + 1);
-      testPoint(reader, dataset, prev + 1);
       testRange(reader, dataset, prev + 1, Integer.MAX_VALUE);
       testRange(reader, dataset, Integer.MAX_VALUE, Integer.MAX_VALUE);
       testRange(reader, dataset, Integer.MIN_VALUE, Integer.MAX_VALUE);
-      testPoint(reader, dataset, Integer.MIN_VALUE);
-      testPoint(reader, dataset, Integer.MAX_VALUE);
     } finally {
       FileUtils.forceDelete(rangeIndexFile);
     }
@@ -193,12 +190,6 @@ public class BitSlicedIndexCreatorTest {
       assertEquals(reader.getMatchingDocIds(max, min), reference);
       assertEquals(reader.getNumMatchingDocs(max, min), reference.getCardinality());
     }
-  }
-
-  private static void testPoint(BitSlicedRangeIndexReader reader, Dataset<int[]> dataset, int value) {
-    ImmutableRoaringBitmap reference = dataset.scan(value, value);
-    assertEquals(reader.getMatchingDocIds(value), reference);
-    assertEquals(reader.getNumMatchingDocs(value), reference.getCardinality());
   }
 
   private void testLong(Dataset<long[]> dataset)
@@ -225,12 +216,9 @@ public class BitSlicedIndexCreatorTest {
       }
       testRange(reader, dataset, prev, prev + 1);
       testRange(reader, dataset, prev + 1, prev + 1);
-      testPoint(reader, dataset, prev + 1);
       testRange(reader, dataset, prev + 1, Long.MAX_VALUE);
       testRange(reader, dataset, Long.MAX_VALUE, Long.MAX_VALUE);
       testRange(reader, dataset, Long.MIN_VALUE, Long.MAX_VALUE);
-      testPoint(reader, dataset, Long.MIN_VALUE);
-      testPoint(reader, dataset, Long.MAX_VALUE);
     } finally {
       FileUtils.forceDelete(rangeIndexFile);
     }
@@ -247,12 +235,6 @@ public class BitSlicedIndexCreatorTest {
       assertEquals(reader.getMatchingDocIds(max, min), reference);
       assertEquals(reader.getNumMatchingDocs(max, min), reference.getCardinality());
     }
-  }
-
-  private static void testPoint(BitSlicedRangeIndexReader reader, Dataset<long[]> dataset, long value) {
-    ImmutableRoaringBitmap reference = dataset.scan(value, value);
-    assertEquals(reader.getMatchingDocIds(value), reference);
-    assertEquals(reader.getNumMatchingDocs(value), reference.getCardinality());
   }
 
   private void testFloat(Dataset<float[]> dataset)
@@ -279,12 +261,9 @@ public class BitSlicedIndexCreatorTest {
       }
       testRange(reader, dataset, prev, prev + 1);
       testRange(reader, dataset, prev + 1, prev + 1);
-      testPoint(reader, dataset, prev + 1);
       testRange(reader, dataset, prev + 1, Float.POSITIVE_INFINITY);
       testRange(reader, dataset, Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY);
       testRange(reader, dataset, Float.NEGATIVE_INFINITY, Float.POSITIVE_INFINITY);
-      testPoint(reader, dataset, Float.POSITIVE_INFINITY);
-      testPoint(reader, dataset, Float.NEGATIVE_INFINITY);
     } finally {
       FileUtils.forceDelete(rangeIndexFile);
     }
@@ -301,12 +280,6 @@ public class BitSlicedIndexCreatorTest {
       assertEquals(reader.getMatchingDocIds(max, min), reference);
       assertEquals(reader.getNumMatchingDocs(max, min), reference.getCardinality());
     }
-  }
-
-  private static void testPoint(BitSlicedRangeIndexReader reader, Dataset<float[]> dataset, float value) {
-    ImmutableRoaringBitmap reference = dataset.scan(value, value);
-    assertEquals(reader.getMatchingDocIds(value), reference);
-    assertEquals(reader.getNumMatchingDocs(value), reference.getCardinality());
   }
 
   private void testDouble(Dataset<double[]> dataset)
@@ -333,12 +306,9 @@ public class BitSlicedIndexCreatorTest {
       }
       testRange(reader, dataset, prev, prev + 1);
       testRange(reader, dataset, prev + 1, prev + 1);
-      testPoint(reader, dataset, prev + 1);
       testRange(reader, dataset, prev + 1, Double.POSITIVE_INFINITY);
       testRange(reader, dataset, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
       testRange(reader, dataset, Double.NEGATIVE_INFINITY, Float.POSITIVE_INFINITY);
-      testPoint(reader, dataset, Double.POSITIVE_INFINITY);
-      testPoint(reader, dataset, Double.NEGATIVE_INFINITY);
     } finally {
       FileUtils.forceDelete(rangeIndexFile);
     }
@@ -355,12 +325,6 @@ public class BitSlicedIndexCreatorTest {
       assertEquals(reader.getMatchingDocIds(max, min), reference);
       assertEquals(reader.getNumMatchingDocs(max, min), reference.getCardinality());
     }
-  }
-
-  private static void testPoint(BitSlicedRangeIndexReader reader, Dataset<double[]> dataset, double value) {
-    ImmutableRoaringBitmap reference = dataset.scan(value, value);
-    assertEquals(reader.getMatchingDocIds(value), reference);
-    assertEquals(reader.getNumMatchingDocs(value), reference.getCardinality());
   }
 
   private static BitSlicedRangeIndexCreator newBitSlicedIndexCreator(ColumnMetadata metadata) {

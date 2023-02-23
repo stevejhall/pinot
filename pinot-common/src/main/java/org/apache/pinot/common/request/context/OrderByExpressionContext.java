@@ -43,10 +43,6 @@ public class OrderByExpressionContext {
     return _isAsc;
   }
 
-  public boolean isDesc() {
-    return !_isAsc;
-  }
-
   /**
    * Adds the columns (IDENTIFIER expressions) in the order-by expression to the given set.
    */

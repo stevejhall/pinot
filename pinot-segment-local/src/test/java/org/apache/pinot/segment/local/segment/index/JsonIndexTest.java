@@ -29,7 +29,6 @@ import org.apache.pinot.segment.spi.V1Constants;
 import org.apache.pinot.segment.spi.index.creator.JsonIndexCreator;
 import org.apache.pinot.segment.spi.index.reader.JsonIndexReader;
 import org.apache.pinot.segment.spi.memory.PinotDataBuffer;
-import org.apache.pinot.spi.config.table.JsonIndexConfig;
 import org.roaringbitmap.buffer.MutableRoaringBitmap;
 import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
@@ -79,8 +78,7 @@ public class JsonIndexTest {
     // @formatter: on
 
     String onHeapColumnName = "onHeap";
-    try (JsonIndexCreator onHeapIndexCreator = new OnHeapJsonIndexCreator(INDEX_DIR, onHeapColumnName,
-        new JsonIndexConfig())) {
+    try (JsonIndexCreator onHeapIndexCreator = new OnHeapJsonIndexCreator(INDEX_DIR, onHeapColumnName)) {
       for (String record : records) {
         onHeapIndexCreator.add(record);
       }
@@ -90,8 +88,7 @@ public class JsonIndexTest {
     Assert.assertTrue(onHeapIndexFile.exists());
 
     String offHeapColumnName = "offHeap";
-    try (JsonIndexCreator offHeapIndexCreator = new OffHeapJsonIndexCreator(INDEX_DIR, offHeapColumnName,
-        new JsonIndexConfig())) {
+    try (JsonIndexCreator offHeapIndexCreator = new OffHeapJsonIndexCreator(INDEX_DIR, offHeapColumnName)) {
       for (String record : records) {
         offHeapIndexCreator.add(record);
       }
@@ -104,7 +101,7 @@ public class JsonIndexTest {
         PinotDataBuffer offHeapDataBuffer = PinotDataBuffer.mapReadOnlyBigEndianFile(offHeapIndexFile);
         JsonIndexReader onHeapIndexReader = new ImmutableJsonIndexReader(onHeapDataBuffer, records.length);
         JsonIndexReader offHeapIndexReader = new ImmutableJsonIndexReader(offHeapDataBuffer, records.length);
-        MutableJsonIndexImpl mutableJsonIndex = new MutableJsonIndexImpl(new JsonIndexConfig())) {
+        MutableJsonIndexImpl mutableJsonIndex = new MutableJsonIndexImpl()) {
       for (String record : records) {
         mutableJsonIndex.add(record);
       }
@@ -161,12 +158,12 @@ public class JsonIndexTest {
     for (int i = 0; i < numRecords; i++) {
       records[i] = String.format(
           "{\"name\":\"adam-%d\",\"addresses\":[{\"street\":\"us-%d\",\"country\":\"us\"},{\"street\":\"ca-%d\","
-              + "\"country\":\"ca\"}]}", i, i, i);
+              + "\"country\":\"ca\"}]}",
+          i, i, i);
     }
 
     String onHeapColumnName = "onHeap";
-    try (JsonIndexCreator onHeapIndexCreator = new OnHeapJsonIndexCreator(INDEX_DIR, onHeapColumnName,
-        new JsonIndexConfig())) {
+    try (JsonIndexCreator onHeapIndexCreator = new OnHeapJsonIndexCreator(INDEX_DIR, onHeapColumnName)) {
       for (String record : records) {
         onHeapIndexCreator.add(record);
       }
@@ -176,8 +173,7 @@ public class JsonIndexTest {
     Assert.assertTrue(onHeapIndexFile.exists());
 
     String offHeapColumnName = "offHeap";
-    try (JsonIndexCreator offHeapIndexCreator = new OffHeapJsonIndexCreator(INDEX_DIR, offHeapColumnName,
-        new JsonIndexConfig())) {
+    try (JsonIndexCreator offHeapIndexCreator = new OffHeapJsonIndexCreator(INDEX_DIR, offHeapColumnName)) {
       for (String record : records) {
         offHeapIndexCreator.add(record);
       }
@@ -190,7 +186,7 @@ public class JsonIndexTest {
         PinotDataBuffer offHeapDataBuffer = PinotDataBuffer.mapReadOnlyBigEndianFile(offHeapIndexFile);
         JsonIndexReader onHeapIndexReader = new ImmutableJsonIndexReader(onHeapDataBuffer, records.length);
         JsonIndexReader offHeapIndexReader = new ImmutableJsonIndexReader(offHeapDataBuffer, records.length);
-        MutableJsonIndexImpl mutableJsonIndex = new MutableJsonIndexImpl(new JsonIndexConfig())) {
+        MutableJsonIndexImpl mutableJsonIndex = new MutableJsonIndexImpl()) {
       for (String record : records) {
         mutableJsonIndex.add(record);
       }

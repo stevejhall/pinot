@@ -18,6 +18,7 @@
  */
 package org.apache.pinot.query.service;
 
+import io.grpc.Context;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
@@ -25,9 +26,11 @@ import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.Executors;
 import org.apache.pinot.common.proto.PinotQueryWorkerGrpc;
 import org.apache.pinot.common.proto.Worker;
+import org.apache.pinot.common.utils.NamedThreadFactory;
+import org.apache.pinot.core.query.scheduler.resources.ResourceManager;
 import org.apache.pinot.core.transport.grpc.GrpcQueryServer;
 import org.apache.pinot.query.runtime.QueryRunner;
 import org.apache.pinot.query.runtime.plan.DistributedStagePlan;
@@ -48,9 +51,11 @@ public class QueryServer extends PinotQueryWorkerGrpc.PinotQueryWorkerImplBase {
 
   public QueryServer(int port, QueryRunner queryRunner) {
     _server = ServerBuilder.forPort(port).addService(this).build();
+    _executorService = Executors.newFixedThreadPool(ResourceManager.DEFAULT_QUERY_WORKER_THREADS,
+        new NamedThreadFactory("query_worker_on_" + port + "_port"));
     _queryRunner = queryRunner;
-    _executorService = queryRunner.getExecutorService();
-    LOGGER.info("Initialized QueryServer on port: {}", port);
+    LOGGER.info("Initialized QueryWorker on port: {} with numWorkerThreads: {}", port,
+        ResourceManager.DEFAULT_QUERY_WORKER_THREADS);
   }
 
   public void start() {
@@ -58,7 +63,7 @@ public class QueryServer extends PinotQueryWorkerGrpc.PinotQueryWorkerImplBase {
     try {
       _queryRunner.start();
       _server.start();
-    } catch (IOException | TimeoutException e) {
+    } catch (IOException e) {
       throw new RuntimeException(e);
     }
   }
@@ -67,9 +72,8 @@ public class QueryServer extends PinotQueryWorkerGrpc.PinotQueryWorkerImplBase {
     LOGGER.info("Shutting down QueryWorker");
     try {
       _queryRunner.shutDown();
-      _server.shutdown();
-      _server.awaitTermination();
-    } catch (InterruptedException | TimeoutException e) {
+      _server.shutdown().awaitTermination();
+    } catch (InterruptedException e) {
       throw new RuntimeException(e);
     }
   }
@@ -88,12 +92,24 @@ public class QueryServer extends PinotQueryWorkerGrpc.PinotQueryWorkerImplBase {
       return;
     }
 
-    // TODO: break this into parsing and execution, so that responseObserver can return upon compilation complete.
-    // compilation complete indicates dispatch successful.
-    _executorService.submit(() -> _queryRunner.processQuery(distributedStagePlan, requestMetadataMap));
-
-    responseObserver.onNext(Worker.QueryResponse.newBuilder()
-        .putMetadata(QueryConfig.KEY_OF_SERVER_RESPONSE_STATUS_OK, "").build());
+    // return dispatch successful.
+    // TODO: return meaningful value here.
+    responseObserver.onNext(Worker.QueryResponse.newBuilder().putMetadata("OK", "OK").build());
     responseObserver.onCompleted();
+
+    // start a new GRPC ctx has all the values as the current context, but won't be cancelled
+    Context ctx = Context.current().fork();
+    // Set ctx as the current context within the Runnable can start asynchronous work here that will not
+    // be cancelled when submit returns
+    ctx.run(() -> {
+      // Process the query
+      try {
+        // TODO: break this into parsing and execution, so that responseObserver can return upon parsing complete.
+        _queryRunner.processQuery(distributedStagePlan, _executorService, requestMetadataMap);
+      } catch (Exception e) {
+        LOGGER.error("Caught exception while processing request", e);
+        throw new RuntimeException(e);
+      }
+    });
   }
 }

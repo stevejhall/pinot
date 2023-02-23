@@ -22,7 +22,6 @@ import com.fasterxml.jackson.core.JsonParseException;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.util.Base64;
-import java.util.Collection;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.pinot.common.utils.DataSchema.ColumnDataType;
 import org.apache.pinot.spi.data.FieldSpec;
@@ -924,8 +923,6 @@ public enum PinotDataType {
     }
   },
 
-  COLLECTION,
-
   OBJECT_ARRAY;
 
   /**
@@ -1204,9 +1201,6 @@ public enum PinotDataType {
   }
 
   private static Object[] toObjectArray(Object array) {
-    if (array instanceof Collection) {
-      return ((Collection<?>) array).toArray();
-    }
     Class<?> componentType = array.getClass().getComponentType();
     if (componentType.isPrimitive()) {
       if (componentType == int.class) {
@@ -1307,7 +1301,6 @@ public enum PinotDataType {
       case BYTES_ARRAY:
         return BYTES;
       case OBJECT_ARRAY:
-      case COLLECTION:
         return OBJECT;
       case BOOLEAN_ARRAY:
         return BOOLEAN;

@@ -18,67 +18,47 @@
  */
 package org.apache.pinot.query.mailbox;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
-import javax.annotation.Nullable;
-import org.apache.pinot.common.datablock.DataBlock;
-import org.apache.pinot.common.datablock.DataBlockUtils;
-import org.apache.pinot.common.datablock.MetadataBlock;
 import org.apache.pinot.common.proto.Mailbox.MailboxContent;
-import org.apache.pinot.query.mailbox.channel.ChannelUtils;
 import org.apache.pinot.query.mailbox.channel.MailboxContentStreamObserver;
-import org.apache.pinot.query.runtime.blocks.TransferableBlock;
-import org.apache.pinot.query.runtime.blocks.TransferableBlockUtils;
 
 
 /**
  * GRPC implementation of the {@link ReceivingMailbox}.
  */
-public class GrpcReceivingMailbox implements ReceivingMailbox<TransferableBlock> {
+public class GrpcReceivingMailbox implements ReceivingMailbox<MailboxContent> {
   private static final long DEFAULT_MAILBOX_INIT_TIMEOUT = 100L;
+  private final GrpcMailboxService _mailboxService;
   private final String _mailboxId;
-  private Consumer<MailboxIdentifier> _gotMailCallback;
   private final CountDownLatch _initializationLatch;
   private final AtomicInteger _totalMsgReceived = new AtomicInteger(0);
 
   private MailboxContentStreamObserver _contentStreamObserver;
 
-  public GrpcReceivingMailbox(String mailboxId, Consumer<MailboxIdentifier> gotMailCallback) {
+  public GrpcReceivingMailbox(String mailboxId, GrpcMailboxService mailboxService) {
+    _mailboxService = mailboxService;
     _mailboxId = mailboxId;
-    _gotMailCallback = gotMailCallback;
     _initializationLatch = new CountDownLatch(1);
   }
 
-  public Consumer<MailboxIdentifier> init(MailboxContentStreamObserver streamObserver) {
+  public void init(MailboxContentStreamObserver streamObserver) {
     if (_initializationLatch.getCount() > 0) {
       _contentStreamObserver = streamObserver;
       _initializationLatch.countDown();
     }
-    return _gotMailCallback;
   }
 
-  /**
-   * Polls the underlying channel and converts the received data into a TransferableBlock. This may return null in the
-   * following cases:
-   *
-   * <p>
-   *  1. If the mailbox hasn't initialized yet. This means we haven't received any data yet.
-   *  2. If the received block from the sender is a data-block with 0 rows.
-   * </p>
-   */
   @Override
-  public TransferableBlock receive()
+  public MailboxContent receive()
       throws Exception {
-    if (!waitForInitialize()) {
-      return null;
+    MailboxContent mailboxContent = null;
+    if (waitForInitialize()) {
+      mailboxContent = _contentStreamObserver.poll();
+      _totalMsgReceived.incrementAndGet();
     }
-    MailboxContent mailboxContent = _contentStreamObserver.poll();
-    _totalMsgReceived.incrementAndGet();
-    return mailboxContent == null ? null : fromMailboxContent(mailboxContent);
+    return mailboxContent;
   }
 
   @Override
@@ -91,10 +71,7 @@ public class GrpcReceivingMailbox implements ReceivingMailbox<TransferableBlock>
     return isInitialized() && _contentStreamObserver.isCompleted();
   }
 
-  @Override
-  public void cancel(Throwable e) {
-  }
-
+  // TODO: fix busy wait. This should be guarded by timeout.
   private boolean waitForInitialize()
       throws Exception {
     if (_initializationLatch.getCount() > 0) {
@@ -107,37 +84,5 @@ public class GrpcReceivingMailbox implements ReceivingMailbox<TransferableBlock>
   @Override
   public String getMailboxId() {
     return _mailboxId;
-  }
-
-  /**
-   * Converts the data sent by a {@link GrpcSendingMailbox} to a {@link TransferableBlock}.
-   *
-   * @param mailboxContent data sent by a GrpcSendingMailbox.
-   * @return null if the received MailboxContent is a data-block with 0 rows.
-   * @throws IOException if the MailboxContent cannot be converted to a TransferableBlock.
-   */
-  @Nullable
-  private TransferableBlock fromMailboxContent(MailboxContent mailboxContent)
-      throws IOException {
-    ByteBuffer byteBuffer = mailboxContent.getPayload().asReadOnlyByteBuffer();
-    DataBlock dataBlock = null;
-    if (byteBuffer.hasRemaining()) {
-      dataBlock = DataBlockUtils.getDataBlock(byteBuffer);
-      if (dataBlock instanceof MetadataBlock && !dataBlock.getExceptions().isEmpty()) {
-        return TransferableBlockUtils.getErrorTransferableBlock(dataBlock.getExceptions());
-      }
-      if (dataBlock.getNumberOfRows() > 0) {
-        return new TransferableBlock(dataBlock);
-      }
-    }
-
-    if (mailboxContent.getMetadataOrDefault(ChannelUtils.MAILBOX_METADATA_END_OF_STREAM_KEY, "false").equals("true")) {
-      if (dataBlock instanceof MetadataBlock) {
-        return TransferableBlockUtils.getEndOfStreamTransferableBlock(((MetadataBlock) dataBlock).getStats());
-      }
-      return TransferableBlockUtils.getEndOfStreamTransferableBlock();
-    }
-
-    return null;
   }
 }

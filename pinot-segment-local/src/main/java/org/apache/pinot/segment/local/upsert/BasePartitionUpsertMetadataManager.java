@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -38,10 +37,8 @@ import org.apache.pinot.segment.local.indexsegment.immutable.ImmutableSegmentImp
 import org.apache.pinot.segment.local.utils.SegmentLocks;
 import org.apache.pinot.segment.spi.ImmutableSegment;
 import org.apache.pinot.segment.spi.IndexSegment;
-import org.apache.pinot.segment.spi.MutableSegment;
 import org.apache.pinot.segment.spi.index.mutable.ThreadSafeMutableRoaringBitmap;
 import org.apache.pinot.spi.config.table.HashFunction;
-import org.apache.pinot.spi.data.readers.GenericRow;
 import org.roaringbitmap.buffer.MutableRoaringBitmap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,10 +60,6 @@ public abstract class BasePartitionUpsertMetadataManager implements PartitionUps
 
   @VisibleForTesting
   public final Set<IndexSegment> _replacedSegments = ConcurrentHashMap.newKeySet();
-
-  protected volatile boolean _stopped = false;
-  // Initialize with 1 pending operation to indicate the metadata manager can take more operations
-  protected final AtomicInteger _numPendingOperations = new AtomicInteger(1);
 
   protected long _lastOutOfOrderEventReportTimeNs = Long.MIN_VALUE;
   protected int _numOutOfOrderEvents = 0;
@@ -92,19 +85,28 @@ public abstract class BasePartitionUpsertMetadataManager implements PartitionUps
 
   @Override
   public void addSegment(ImmutableSegment segment) {
-    if (_stopped) {
-      _logger.info("Skip adding segment: {} because metadata manager is already stopped", segment.getSegmentName());
-      return;
+    Iterator<RecordInfo> recordInfoIterator = null;
+    if (segment instanceof ImmutableSegmentImpl) {
+      if (_enableSnapshot) {
+        MutableRoaringBitmap validDocIds = ((ImmutableSegmentImpl) segment).loadValidDocIdsFromSnapshot();
+        if (validDocIds != null) {
+          recordInfoIterator =
+              UpsertUtils.getRecordInfoIterator(segment, _primaryKeyColumns, _comparisonColumn, validDocIds);
+        }
+      } else {
+        ((ImmutableSegmentImpl) segment).deleteValidDocIdsSnapshot();
+      }
     }
-    startOperation();
-    try {
-      doAddSegment(segment);
-    } finally {
-      finishOperation();
-    }
+    addSegment(segment, null, recordInfoIterator);
   }
 
-  protected void doAddSegment(ImmutableSegment segment) {
+  /**
+   * NOTE: We allow passing in validDocIds here so that the value can be easily accessed from the tests. The passed in
+   *       validDocIds should always be empty.
+   */
+  @VisibleForTesting
+  public void addSegment(ImmutableSegment segment, @Nullable ThreadSafeMutableRoaringBitmap validDocIds,
+      @Nullable Iterator<RecordInfo> recordInfoIterator) {
     String segmentName = segment.getSegmentName();
     _logger.info("Adding segment: {}, current primary key count: {}", segmentName, getNumPrimaryKeys());
 
@@ -113,37 +115,21 @@ public abstract class BasePartitionUpsertMetadataManager implements PartitionUps
       return;
     }
 
-    Preconditions.checkArgument(segment instanceof ImmutableSegmentImpl,
-        "Got unsupported segment implementation: {} for segment: {}, table: {}", segment.getClass(), segmentName,
-        _tableNameWithType);
-
-    ImmutableSegmentImpl immutableSegmentImpl = (ImmutableSegmentImpl) segment;
-    MutableRoaringBitmap validDocIds;
-    if (_enableSnapshot) {
-      validDocIds = immutableSegmentImpl.loadValidDocIdsFromSnapshot();
-      if (validDocIds != null && validDocIds.isEmpty()) {
-        _logger.info("Skip adding segment: {} without valid doc, current primary key count: {}",
-            segment.getSegmentName(), getNumPrimaryKeys());
-        return;
+    Lock segmentLock = SegmentLocks.getSegmentLock(_tableNameWithType, segmentName);
+    segmentLock.lock();
+    try {
+      Preconditions.checkArgument(segment instanceof ImmutableSegmentImpl,
+          "Got unsupported segment implementation: {} for segment: {}, table: {}", segment.getClass(), segmentName,
+          _tableNameWithType);
+      if (validDocIds == null) {
+        validDocIds = new ThreadSafeMutableRoaringBitmap();
       }
-    } else {
-      validDocIds = null;
-      immutableSegmentImpl.deleteValidDocIdsSnapshot();
-    }
-
-    try (UpsertUtils.RecordInfoReader recordInfoReader = new UpsertUtils.RecordInfoReader(segment, _primaryKeyColumns,
-        _comparisonColumn)) {
-      Iterator<RecordInfo> recordInfoIterator;
-      if (validDocIds != null) {
-        recordInfoIterator = UpsertUtils.getRecordInfoIterator(recordInfoReader, validDocIds);
-      } else {
-        recordInfoIterator =
-            UpsertUtils.getRecordInfoIterator(recordInfoReader, segment.getSegmentMetadata().getTotalDocs());
+      if (recordInfoIterator == null) {
+        recordInfoIterator = UpsertUtils.getRecordInfoIterator(segment, _primaryKeyColumns, _comparisonColumn);
       }
-      addSegment(immutableSegmentImpl, null, recordInfoIterator);
-    } catch (Exception e) {
-      throw new RuntimeException(
-          String.format("Caught exception while adding segment: %s, table: %s", segmentName, _tableNameWithType), e);
+      addOrReplaceSegment((ImmutableSegmentImpl) segment, validDocIds, recordInfoIterator, null, null);
+    } finally {
+      segmentLock.unlock();
     }
 
     // Update metrics
@@ -154,26 +140,6 @@ public abstract class BasePartitionUpsertMetadataManager implements PartitionUps
     _logger.info("Finished adding segment: {}, current primary key count: {}", segmentName, numPrimaryKeys);
   }
 
-  /**
-   * NOTE: We allow passing in validDocIds here so that the value can be easily accessed from the tests. The passed in
-   *       validDocIds should always be empty.
-   */
-  @VisibleForTesting
-  public void addSegment(ImmutableSegmentImpl segment, @Nullable ThreadSafeMutableRoaringBitmap validDocIds,
-      Iterator<RecordInfo> recordInfoIterator) {
-    String segmentName = segment.getSegmentName();
-    Lock segmentLock = SegmentLocks.getSegmentLock(_tableNameWithType, segmentName);
-    segmentLock.lock();
-    try {
-      if (validDocIds == null) {
-        validDocIds = new ThreadSafeMutableRoaringBitmap();
-      }
-      addOrReplaceSegment(segment, validDocIds, recordInfoIterator, null, null);
-    } finally {
-      segmentLock.unlock();
-    }
-  }
-
   protected abstract long getNumPrimaryKeys();
 
   protected abstract void addOrReplaceSegment(ImmutableSegmentImpl segment, ThreadSafeMutableRoaringBitmap validDocIds,
@@ -181,66 +147,8 @@ public abstract class BasePartitionUpsertMetadataManager implements PartitionUps
       @Nullable MutableRoaringBitmap validDocIdsForOldSegment);
 
   @Override
-  public void addRecord(MutableSegment segment, RecordInfo recordInfo) {
-    if (_stopped) {
-      _logger.debug("Skip adding record to segment: {} because metadata manager is already stopped",
-          segment.getSegmentName());
-      return;
-    }
-    startOperation();
-    try {
-      doAddRecord(segment, recordInfo);
-    } finally {
-      finishOperation();
-    }
-  }
-
-  protected abstract void doAddRecord(MutableSegment segment, RecordInfo recordInfo);
-
-  @Override
   public void replaceSegment(ImmutableSegment segment, IndexSegment oldSegment) {
-    if (_stopped) {
-      _logger.info("Skip replacing segment: {} because metadata manager is already stopped", segment.getSegmentName());
-      return;
-    }
-    startOperation();
-    try {
-      doReplaceSegment(segment, oldSegment);
-    } finally {
-      finishOperation();
-    }
-  }
-
-  protected void doReplaceSegment(ImmutableSegment segment, IndexSegment oldSegment) {
-    String segmentName = segment.getSegmentName();
-    Preconditions.checkArgument(segmentName.equals(oldSegment.getSegmentName()),
-        "Cannot replace segment with different name for table: {}, old segment: {}, new segment: {}",
-        _tableNameWithType, oldSegment.getSegmentName(), segmentName);
-    _logger.info("Replacing {} segment: {}, current primary key count: {}",
-        oldSegment instanceof ImmutableSegment ? "immutable" : "mutable", segmentName, getNumPrimaryKeys());
-
-    if (segment instanceof EmptyIndexSegment) {
-      _logger.info("Skip adding empty segment: {}", segmentName);
-      replaceSegment(segment, null, null, oldSegment);
-      return;
-    }
-
-    try (UpsertUtils.RecordInfoReader recordInfoReader = new UpsertUtils.RecordInfoReader(segment, _primaryKeyColumns,
-        _comparisonColumn)) {
-      Iterator<RecordInfo> recordInfoIterator =
-          UpsertUtils.getRecordInfoIterator(recordInfoReader, segment.getSegmentMetadata().getTotalDocs());
-      replaceSegment(segment, null, recordInfoIterator, oldSegment);
-    } catch (Exception e) {
-      throw new RuntimeException(
-          String.format("Caught exception while replacing segment: %s, table: %s", segmentName, _tableNameWithType), e);
-    }
-
-    // Update metrics
-    long numPrimaryKeys = getNumPrimaryKeys();
-    _serverMetrics.setValueOfPartitionGauge(_tableNameWithType, _partitionId, ServerGauge.UPSERT_PRIMARY_KEYS_COUNT,
-        numPrimaryKeys);
-
-    _logger.info("Finished replacing segment: {}, current primary key count: {}", segmentName, numPrimaryKeys);
+    replaceSegment(segment, null, null, oldSegment);
   }
 
   /**
@@ -251,17 +159,31 @@ public abstract class BasePartitionUpsertMetadataManager implements PartitionUps
   public void replaceSegment(ImmutableSegment segment, @Nullable ThreadSafeMutableRoaringBitmap validDocIds,
       @Nullable Iterator<RecordInfo> recordInfoIterator, IndexSegment oldSegment) {
     String segmentName = segment.getSegmentName();
+    Preconditions.checkArgument(segmentName.equals(oldSegment.getSegmentName()),
+        "Cannot replace segment with different name for table: {}, old segment: {}, new segment: {}",
+        _tableNameWithType, oldSegment.getSegmentName(), segmentName);
+    _logger.info("Replacing {} segment: {}, current primary key count: {}",
+        oldSegment instanceof ImmutableSegment ? "immutable" : "mutable", segmentName, getNumPrimaryKeys());
+
     Lock segmentLock = SegmentLocks.getSegmentLock(_tableNameWithType, segmentName);
     segmentLock.lock();
     try {
       MutableRoaringBitmap validDocIdsForOldSegment =
           oldSegment.getValidDocIds() != null ? oldSegment.getValidDocIds().getMutableRoaringBitmap() : null;
-      if (recordInfoIterator != null) {
+      if (segment instanceof EmptyIndexSegment) {
+        _logger.info("Skip adding empty segment: {}", segmentName);
+      } else {
         Preconditions.checkArgument(segment instanceof ImmutableSegmentImpl,
             "Got unsupported segment implementation: {} for segment: {}, table: {}", segment.getClass(), segmentName,
             _tableNameWithType);
         if (validDocIds == null) {
           validDocIds = new ThreadSafeMutableRoaringBitmap();
+        }
+        // New segment doesn't necessary have the same docs as the old segment.
+        // Even for consuming segment, we might re-order the docs.
+        // As a result, we iterate all docIds of the new segment instead of loading it from old segment's snapshot.
+        if (recordInfoIterator == null) {
+          recordInfoIterator = UpsertUtils.getRecordInfoIterator(segment, _primaryKeyColumns, _comparisonColumn);
         }
         addOrReplaceSegment((ImmutableSegmentImpl) segment, validDocIds, recordInfoIterator, oldSegment,
             validDocIdsForOldSegment);
@@ -291,6 +213,13 @@ public abstract class BasePartitionUpsertMetadataManager implements PartitionUps
     if (!(oldSegment instanceof EmptyIndexSegment)) {
       _replacedSegments.add(oldSegment);
     }
+
+    // Update metrics
+    long numPrimaryKeys = getNumPrimaryKeys();
+    _serverMetrics.setValueOfPartitionGauge(_tableNameWithType, _partitionId, ServerGauge.UPSERT_PRIMARY_KEYS_COUNT,
+        numPrimaryKeys);
+
+    _logger.info("Finished replacing segment: {}, current primary key count: {}", segmentName, numPrimaryKeys);
   }
 
   protected abstract void removeSegment(IndexSegment segment, MutableRoaringBitmap validDocIds);
@@ -298,43 +227,29 @@ public abstract class BasePartitionUpsertMetadataManager implements PartitionUps
   @Override
   public void removeSegment(IndexSegment segment) {
     String segmentName = segment.getSegmentName();
+    _logger.info("Removing {} segment: {}, current primary key count: {}",
+        segment instanceof ImmutableSegment ? "immutable" : "mutable", segmentName, getNumPrimaryKeys());
+
     if (_replacedSegments.remove(segment)) {
       _logger.info("Skip removing replaced segment: {}", segmentName);
       return;
     }
-    // Allow persisting valid doc ids snapshot after metadata manager is stopped
-    MutableRoaringBitmap validDocIds =
-        segment.getValidDocIds() != null ? segment.getValidDocIds().getMutableRoaringBitmap() : null;
-    if (_enableSnapshot && segment instanceof ImmutableSegmentImpl) {
-      ((ImmutableSegmentImpl) segment).persistValidDocIdsSnapshot(validDocIds);
-    }
-    if (validDocIds == null || validDocIds.isEmpty()) {
-      _logger.info("Skip removing segment without valid docs: {}", segmentName);
-      return;
-    }
-    if (_stopped) {
-      _logger.info("Skip removing segment: {} because metadata manager is already stopped", segmentName);
-      return;
-    }
-    startOperation();
-    try {
-      doRemoveSegment(segment);
-    } finally {
-      finishOperation();
-    }
-  }
-
-  protected void doRemoveSegment(IndexSegment segment) {
-    String segmentName = segment.getSegmentName();
-    _logger.info("Removing {} segment: {}, current primary key count: {}",
-        segment instanceof ImmutableSegment ? "immutable" : "mutable", segmentName, getNumPrimaryKeys());
 
     Lock segmentLock = SegmentLocks.getSegmentLock(_tableNameWithType, segmentName);
     segmentLock.lock();
     try {
-      assert segment.getValidDocIds() != null;
-      MutableRoaringBitmap validDocIds = segment.getValidDocIds().getMutableRoaringBitmap();
-      assert validDocIds != null;
+      MutableRoaringBitmap validDocIds =
+          segment.getValidDocIds() != null ? segment.getValidDocIds().getMutableRoaringBitmap() : null;
+
+      if (_enableSnapshot && segment instanceof ImmutableSegmentImpl && validDocIds != null) {
+        ((ImmutableSegmentImpl) segment).persistValidDocIdsSnapshot(validDocIds);
+      }
+
+      if (validDocIds == null || validDocIds.isEmpty()) {
+        _logger.info("Skip removing segment without valid docs: {}", segmentName);
+        return;
+      }
+
       _logger.info("Removing {} primary keys for segment: {}", validDocIds.getCardinality(), segmentName);
       removeSegment(segment, validDocIds);
     } finally {
@@ -349,26 +264,6 @@ public abstract class BasePartitionUpsertMetadataManager implements PartitionUps
     _logger.info("Finished removing segment: {}, current primary key count: {}", segmentName, numPrimaryKeys);
   }
 
-  @Override
-  public GenericRow updateRecord(GenericRow record, RecordInfo recordInfo) {
-    // Directly return the record when partial-upsert is not enabled
-    if (_partialUpsertHandler == null) {
-      return record;
-    }
-    if (_stopped) {
-      _logger.debug("Skip updating record because metadata manager is already stopped");
-      return record;
-    }
-    startOperation();
-    try {
-      return doUpdateRecord(record, recordInfo);
-    } finally {
-      finishOperation();
-    }
-  }
-
-  protected abstract GenericRow doUpdateRecord(GenericRow record, RecordInfo recordInfo);
-
   protected void handleOutOfOrderEvent(Object currentComparisonValue, Object recordComparisonValue) {
     _serverMetrics.addMeteredTableValue(_tableNameWithType, ServerMeter.PARTIAL_UPSERT_OUT_OF_ORDER, 1L);
     _numOutOfOrderEvents++;
@@ -382,48 +277,9 @@ public abstract class BasePartitionUpsertMetadataManager implements PartitionUps
     }
   }
 
-  protected void startOperation() {
-    _numPendingOperations.getAndIncrement();
-  }
-
-  protected void finishOperation() {
-    if (_numPendingOperations.decrementAndGet() == 0) {
-      synchronized (_numPendingOperations) {
-        _numPendingOperations.notifyAll();
-      }
-    }
-  }
-
-  @Override
-  public void stop() {
-    _stopped = true;
-    int numPendingOperations = _numPendingOperations.decrementAndGet();
-    _logger.info("Stopped the metadata manager with {} pending operations, current primary key count: {}",
-        numPendingOperations, getNumPrimaryKeys());
-  }
-
   @Override
   public void close()
       throws IOException {
-    Preconditions.checkState(_stopped, "Must stop the metadata manager before closing it");
-    _logger.info("Closing the metadata manager");
-    synchronized (_numPendingOperations) {
-      int numPendingOperations;
-      while ((numPendingOperations = _numPendingOperations.get()) != 0) {
-        _logger.info("Waiting for {} pending operations to finish", numPendingOperations);
-        try {
-          _numPendingOperations.wait();
-        } catch (InterruptedException e) {
-          throw new RuntimeException(
-              String.format("Interrupted while waiting for %d pending operations to finish", numPendingOperations), e);
-        }
-      }
-    }
-    doClose();
-    _logger.info("Closed the metadata manager");
-  }
-
-  protected void doClose()
-      throws IOException {
+    _logger.info("Closing the metadata manager, current primary key count: {}", getNumPrimaryKeys());
   }
 }

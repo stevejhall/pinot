@@ -18,9 +18,6 @@
  */
 package org.apache.pinot.query.mailbox;
 
-import org.apache.pinot.query.routing.VirtualServerAddress;
-
-
 /**
  * {@link MailboxIdentifier} uniquely identify the mailbox that pairs a sender and a receiver.
  *
@@ -35,29 +32,26 @@ public interface MailboxIdentifier {
   String getJobId();
 
   /**
-   * @return the sender address
+   * get the sender host.
+   * @return sender host
    */
-  VirtualServerAddress getFromHost();
+  String getFromHost();
 
   /**
-   * @return the destination address
+   * get the sender port.
+   * @return sender port
    */
-  VirtualServerAddress getToHost();
+  int getFromPort();
 
   /**
-   * Checks whether sender and receiver are in the same JVM.
-   *
-   * @return true if sender and receiver are in the same JVM.
+   * get the receiver host.
+   * @return receiver host
    */
-  boolean isLocal();
+  String getToHost();
 
   /**
-   * @return stage-id of the stage that is sending the data across this mailbox.
+   * get the receiver port.
+   * @return receiver port
    */
-  int getSenderStageId();
-
-  /**
-   * @return stage-id of the stage that is receiving the data from this mailbox.
-   */
-  int getReceiverStageId();
+  int getToPort();
 }

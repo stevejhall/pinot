@@ -98,6 +98,7 @@ import org.apache.pinot.controller.util.TableIngestionStatusHelper;
 import org.apache.pinot.controller.util.TableMetadataReader;
 import org.apache.pinot.core.auth.ManualAuthorization;
 import org.apache.pinot.segment.local.utils.TableConfigUtils;
+import org.apache.pinot.spi.config.table.SegmentsValidationAndRetentionConfig;
 import org.apache.pinot.spi.config.table.TableConfig;
 import org.apache.pinot.spi.config.table.TableStats;
 import org.apache.pinot.spi.config.table.TableStatus;
@@ -238,7 +239,7 @@ public class PinotTableRestletResource {
     }
   }
 
-  @PUT
+  @GET
   @Produces(MediaType.APPLICATION_JSON)
   @Path("/tables/recommender")
   @ApiOperation(value = "Recommend config", notes = "Recommend a config with input json")
@@ -641,11 +642,7 @@ public class PinotTableRestletResource {
           + "number of replicas allowed to be unavailable if value is negative") @DefaultValue("1")
   @QueryParam("minAvailableReplicas") int minAvailableReplicas, @ApiParam(
       value = "Whether to use best-efforts to rebalance (not fail the rebalance when the no-downtime contract cannot "
-          + "be achieved)") @DefaultValue("false") @QueryParam("bestEfforts") boolean bestEfforts, @ApiParam(
-      value = "How often to check if external view converges with ideal states") @DefaultValue("1000")
-  @QueryParam("externalViewCheckIntervalInMs") long externalViewCheckIntervalInMs,
-      @ApiParam(value = "How long to wait till external view converges with ideal states") @DefaultValue("3600000")
-      @QueryParam("externalViewStabilizationTimeoutInMs") long externalViewStabilizationTimeoutInMs) {
+          + "be achieved)") @DefaultValue("false") @QueryParam("bestEfforts") boolean bestEfforts) {
 
     String tableNameWithType = constructTableNameWithType(tableName, tableTypeStr);
 
@@ -657,10 +654,6 @@ public class PinotTableRestletResource {
     rebalanceConfig.addProperty(RebalanceConfigConstants.DOWNTIME, downtime);
     rebalanceConfig.addProperty(RebalanceConfigConstants.MIN_REPLICAS_TO_KEEP_UP_FOR_NO_DOWNTIME, minAvailableReplicas);
     rebalanceConfig.addProperty(RebalanceConfigConstants.BEST_EFFORTS, bestEfforts);
-    rebalanceConfig.addProperty(RebalanceConfigConstants.EXTERNAL_VIEW_CHECK_INTERVAL_IN_MS,
-        externalViewCheckIntervalInMs);
-    rebalanceConfig.addProperty(RebalanceConfigConstants.EXTERNAL_VIEW_STABILIZATION_TIMEOUT_IN_MS,
-        externalViewStabilizationTimeoutInMs);
 
     try {
       if (dryRun || downtime) {
@@ -818,7 +811,9 @@ public class PinotTableRestletResource {
     String tableNameWithType =
         ResourceUtils.getExistingTableNamesWithType(_pinotHelixResourceManager, tableName, tableType, LOGGER).get(0);
     TableConfig tableConfig = _pinotHelixResourceManager.getTableConfig(tableNameWithType);
-    int numReplica = tableConfig == null ? 1 : tableConfig.getReplication();
+    SegmentsValidationAndRetentionConfig segmentsConfig =
+        tableConfig != null ? tableConfig.getValidationConfig() : null;
+    int numReplica = segmentsConfig == null ? 1 : Integer.parseInt(segmentsConfig.getReplication());
 
     String segmentsMetadata;
     try {
@@ -855,19 +850,16 @@ public class PinotTableRestletResource {
       notes = "Get list of controller jobs for this table")
   public Map<String, Map<String, String>> getControllerJobs(
       @ApiParam(value = "Name of the table", required = true) @PathParam("tableName") String tableName,
-      @ApiParam(value = "OFFLINE|REALTIME") @QueryParam("type") String tableTypeStr,
-      @ApiParam(value = "Comma separated list of job types") @QueryParam("jobTypes") @Nullable String jobTypesString) {
+      @ApiParam(value = "OFFLINE|REALTIME") @QueryParam("type") String tableTypeStr
+  ) {
     TableType tableTypeFromRequest = Constants.validateTableType(tableTypeStr);
     List<String> tableNamesWithType =
         ResourceUtils.getExistingTableNamesWithType(_pinotHelixResourceManager, tableName, tableTypeFromRequest,
             LOGGER);
-    Set<String> jobTypesToFilter = null;
-    if (StringUtils.isNotEmpty(jobTypesString)) {
-      jobTypesToFilter = new HashSet<>(java.util.Arrays.asList(StringUtils.split(jobTypesString, ',')));
-    }
+
     Map<String, Map<String, String>> result = new HashMap<>();
     for (String tableNameWithType : tableNamesWithType) {
-      result.putAll(_pinotHelixResourceManager.getAllJobsForTable(tableNameWithType, jobTypesToFilter));
+      result.putAll(_pinotHelixResourceManager.getAllJobsForTable(tableNameWithType));
     }
 
     return result;
@@ -877,7 +869,6 @@ public class PinotTableRestletResource {
   @Path("tables/{tableName}/timeBoundary")
   @ApiOperation(value = "Set hybrid table query time boundary based on offline segments' metadata", notes = "Set "
       + "hybrid table query time boundary based on offline segments' metadata")
-  @Produces(MediaType.APPLICATION_JSON)
   public SuccessResponse setTimeBoundary(
       @ApiParam(value = "Name of the hybrid table (without type suffix)", required = true) @PathParam("tableName")
       String tableName)
@@ -916,7 +907,6 @@ public class PinotTableRestletResource {
   @DELETE
   @Path("tables/{tableName}/timeBoundary")
   @ApiOperation(value = "Delete hybrid table query time boundary", notes = "Delete hybrid table query time boundary")
-  @Produces(MediaType.APPLICATION_JSON)
   public SuccessResponse deleteTimeBoundary(
       @ApiParam(value = "Name of the hybrid table (without type suffix)", required = true) @PathParam("tableName")
       String tableName) {

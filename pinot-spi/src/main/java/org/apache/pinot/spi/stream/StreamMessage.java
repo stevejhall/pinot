@@ -38,29 +38,23 @@ import javax.annotation.Nullable;
  * Additionally, the pinot table schema should refer these fields. Otherwise, even though the fields are extracted,
  * they will not materialize in the pinot table.
  */
-public class StreamMessage<T> {
+public class StreamMessage {
   private final byte[] _key;
-  private final T _value;
+  private final byte[] _value;
   protected final StreamMessageMetadata _metadata;
-  int _length = -1;
 
-  public StreamMessage(@Nullable byte[] key, T value, @Nullable StreamMessageMetadata metadata, int length) {
+  public StreamMessage(@Nullable byte[] key, byte[] value, @Nullable StreamMessageMetadata metadata) {
     _key = key;
     _value = value;
     _metadata = metadata;
-    _length = length;
   }
 
-  public StreamMessage(T value, int length) {
-    this(null, value, null, length);
+  public StreamMessage(byte[] value) {
+    this(null, value, null);
   }
 
-  public T getValue() {
+  public byte[] getValue() {
     return _value;
-  }
-
-  public int getLength() {
-    return _length;
   }
 
   @Nullable

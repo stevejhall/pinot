@@ -28,7 +28,6 @@ import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 
-@Test(groups = "stateless")
 public class ControllerPeriodicTaskStarterStatelessTest extends ControllerTest {
 
   @BeforeClass
@@ -57,7 +56,7 @@ public class ControllerPeriodicTaskStarterStatelessTest extends ControllerTest {
   }
 
   private class MockControllerStarter extends ControllerStarter {
-    private static final int NUM_PERIODIC_TASKS = 10;
+    private static final int NUM_PERIODIC_TASKS = 9;
 
     public MockControllerStarter() {
       super();

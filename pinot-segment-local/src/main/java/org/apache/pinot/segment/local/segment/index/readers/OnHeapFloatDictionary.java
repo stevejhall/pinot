@@ -47,7 +47,7 @@ public class OnHeapFloatDictionary extends BaseImmutableDictionary {
    * @param length Length of the dictionary
    */
   public OnHeapFloatDictionary(PinotDataBuffer dataBuffer, int length) {
-    super(dataBuffer, length, Float.BYTES);
+    super(dataBuffer, length, Float.BYTES, (byte) 0);
 
     _valToDictId = new Float2IntOpenHashMap(length);
     _valToDictId.defaultReturnValue(Dictionary.NULL_VALUE_INDEX);

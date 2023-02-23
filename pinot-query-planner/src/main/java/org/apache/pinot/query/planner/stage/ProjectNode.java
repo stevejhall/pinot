@@ -46,9 +46,4 @@ public class ProjectNode extends AbstractStageNode {
   public String explain() {
     return "PROJECT";
   }
-
-  @Override
-  public <T, C> T visit(StageNodeVisitor<T, C> visitor, C context) {
-    return visitor.visitProject(this, context);
-  }
 }

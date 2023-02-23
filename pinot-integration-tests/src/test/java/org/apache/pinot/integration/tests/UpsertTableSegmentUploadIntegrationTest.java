@@ -37,7 +37,6 @@ import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertFalse;
 
 
 public class UpsertTableSegmentUploadIntegrationTest extends BaseClusterIntegrationTestSet {
@@ -88,24 +87,7 @@ public class UpsertTableSegmentUploadIntegrationTest extends BaseClusterIntegrat
   @AfterClass
   public void tearDown()
       throws IOException {
-    String realtimeTableName = TableNameBuilder.REALTIME.tableNameWithType(getTableName());
-
-    // Test dropping all segments one by one
-    List<String> segments = listSegments(realtimeTableName);
-    assertFalse(segments.isEmpty());
-    for (String segment : segments) {
-      dropSegment(realtimeTableName, segment);
-    }
-    // NOTE: There is a delay to remove the segment from property store
-    TestUtils.waitForCondition((aVoid) -> {
-      try {
-        return listSegments(realtimeTableName).isEmpty();
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    }, 60_000L, "Failed to drop the segments");
-
-    dropRealtimeTable(realtimeTableName);
+    dropRealtimeTable(getTableName());
     stopServer();
     stopBroker();
     stopController();
@@ -127,6 +109,11 @@ public class UpsertTableSegmentUploadIntegrationTest extends BaseClusterIntegrat
   @Override
   protected String getAvroTarFileName() {
     return "upsert_test.tar.gz";
+  }
+
+  @Override
+  protected boolean useLlc() {
+    return true;
   }
 
   @Override

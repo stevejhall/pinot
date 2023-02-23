@@ -36,7 +36,7 @@ public class PinotTableRebalancer extends PinotZKChanger {
 
   public PinotTableRebalancer(String zkAddress, String clusterName, boolean dryRun, boolean reassignInstances,
       boolean includeConsuming, boolean bootstrap, boolean downtime, int minReplicasToKeepUpForNoDowntime,
-      boolean bestEffort, long externalViewCheckIntervalInMs, long externalViewStabilizationTimeoutInMs) {
+      boolean bestEffort) {
     super(zkAddress, clusterName);
     _rebalanceConfig.addProperty(RebalanceConfigConstants.DRY_RUN, dryRun);
     _rebalanceConfig.addProperty(RebalanceConfigConstants.REASSIGN_INSTANCES, reassignInstances);
@@ -46,10 +46,6 @@ public class PinotTableRebalancer extends PinotZKChanger {
     _rebalanceConfig.addProperty(RebalanceConfigConstants.MIN_REPLICAS_TO_KEEP_UP_FOR_NO_DOWNTIME,
         minReplicasToKeepUpForNoDowntime);
     _rebalanceConfig.addProperty(RebalanceConfigConstants.BEST_EFFORTS, bestEffort);
-    _rebalanceConfig.addProperty(RebalanceConfigConstants.EXTERNAL_VIEW_CHECK_INTERVAL_IN_MS,
-        externalViewCheckIntervalInMs);
-    _rebalanceConfig.addProperty(RebalanceConfigConstants.EXTERNAL_VIEW_STABILIZATION_TIMEOUT_IN_MS,
-        externalViewStabilizationTimeoutInMs);
   }
 
   public RebalanceResult rebalance(String tableNameWithType) {

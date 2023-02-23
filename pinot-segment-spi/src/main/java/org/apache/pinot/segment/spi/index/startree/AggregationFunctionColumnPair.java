@@ -18,11 +18,10 @@
  */
 package org.apache.pinot.segment.spi.index.startree;
 
-import java.util.Comparator;
 import org.apache.pinot.segment.spi.AggregationFunctionType;
 
 
-public class AggregationFunctionColumnPair implements Comparable<AggregationFunctionColumnPair> {
+public class AggregationFunctionColumnPair {
   public static final String DELIMITER = "__";
   public static final String STAR = "*";
   public static final AggregationFunctionColumnPair COUNT_STAR =
@@ -86,12 +85,5 @@ public class AggregationFunctionColumnPair implements Comparable<AggregationFunc
   @Override
   public String toString() {
     return toColumnName();
-  }
-
-  @Override
-  public int compareTo(AggregationFunctionColumnPair other) {
-    return Comparator.comparing((AggregationFunctionColumnPair o) -> o._column)
-        .thenComparing((AggregationFunctionColumnPair o) -> o._functionType)
-        .compare(this, other);
   }
 }

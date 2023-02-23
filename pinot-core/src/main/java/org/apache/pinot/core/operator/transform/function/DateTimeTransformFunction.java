@@ -33,12 +33,12 @@ import org.joda.time.chrono.ISOChronology;
 
 
 public abstract class DateTimeTransformFunction extends BaseTransformFunction {
-  protected static final Chronology UTC = ISOChronology.getInstanceUTC();
-  protected static final TransformResultMetadata METADATA =
-      new TransformResultMetadata(FieldSpec.DataType.INT, true, false);
 
-  protected final String _name;
-  protected TransformFunction _timestampsFunction;
+  private static final TransformResultMetadata METADATA =
+      new TransformResultMetadata(FieldSpec.DataType.INT, true, false);
+  private final String _name;
+  private TransformFunction _timestampsFunction;
+  protected static final Chronology UTC = ISOChronology.getInstanceUTC();
   protected Chronology _chronology;
 
   protected DateTimeTransformFunction(String name) {
@@ -51,7 +51,8 @@ public abstract class DateTimeTransformFunction extends BaseTransformFunction {
     _timestampsFunction = arguments.get(0);
     if (arguments.size() == 2) {
       Preconditions.checkArgument(arguments.get(1) instanceof LiteralTransformFunction,
-          "zoneId parameter %s must be a literal", _name);
+          "zoneId parameter %s must be a literal",
+          _name);
       _chronology =
           ISOChronology.getInstance(DateTimeZone.forID(((LiteralTransformFunction) arguments.get(1)).getLiteral()));
     } else {
@@ -72,7 +73,7 @@ public abstract class DateTimeTransformFunction extends BaseTransformFunction {
   @Override
   public int[] transformToIntValuesSV(ProjectionBlock projectionBlock) {
     int numDocs = projectionBlock.getNumDocs();
-    if (_intValuesSV == null) {
+    if (_intValuesSV == null || _intValuesSV.length < numDocs) {
       _intValuesSV = new int[numDocs];
     }
     long[] timestamps = _timestampsFunction.transformToLongValuesSV(projectionBlock);

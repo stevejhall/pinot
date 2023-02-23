@@ -30,6 +30,7 @@ import org.apache.pinot.common.tier.Tier;
 import org.apache.pinot.controller.helix.core.assignment.segment.strategy.AllServersSegmentAssignmentStrategy;
 import org.apache.pinot.controller.helix.core.assignment.segment.strategy.SegmentAssignmentStrategy;
 import org.apache.pinot.controller.helix.core.assignment.segment.strategy.SegmentAssignmentStrategyFactory;
+import org.apache.pinot.spi.config.table.TableConfig;
 import org.apache.pinot.spi.config.table.assignment.InstancePartitionsType;
 import org.apache.pinot.spi.utils.RebalanceConfigConstants;
 
@@ -38,6 +39,11 @@ import org.apache.pinot.spi.utils.RebalanceConfigConstants;
  * Segment assignment for offline table.
  */
 public class OfflineSegmentAssignment extends BaseSegmentAssignment {
+
+  @Override
+  protected int getReplication(TableConfig tableConfig) {
+    return tableConfig.getValidationConfig().getReplicationNumber();
+  }
 
   @Override
   public List<String> assignSegment(String segmentName, Map<String, Map<String, String>> currentAssignment,
@@ -83,7 +89,7 @@ public class OfflineSegmentAssignment extends BaseSegmentAssignment {
 
     // Rebalance tiers first
     Pair<List<Map<String, Map<String, String>>>, Map<String, Map<String, String>>> pair =
-        rebalanceTiers(currentAssignment, sortedTiers, tierInstancePartitionsMap, bootstrap,
+        rebalanceTiers(currentAssignment, sortedTiers, tierInstancePartitionsMap, bootstrap, segmentAssignmentStrategy,
             InstancePartitionsType.OFFLINE);
     List<Map<String, Map<String, String>>> newTierAssignments = pair.getLeft();
     Map<String, Map<String, String>> nonTierAssignment = pair.getRight();

@@ -73,11 +73,10 @@ public class MinAggregationFunction extends BaseSingleInputAggregationFunction<D
     BlockValSet blockValSet = blockValSetMap.get(_expression);
     if (_nullHandlingEnabled) {
       RoaringBitmap nullBitmap = blockValSet.getNullBitmap();
-      if (nullBitmap == null) {
-        nullBitmap = new RoaringBitmap();
+      if (nullBitmap != null && !nullBitmap.isEmpty()) {
+        aggregateNullHandlingEnabled(length, aggregationResultHolder, blockValSet, nullBitmap);
+        return;
       }
-      aggregateNullHandlingEnabled(length, aggregationResultHolder, blockValSet, nullBitmap);
-      return;
     }
 
     switch (blockValSet.getValueType().getStoredType()) {
@@ -220,21 +219,20 @@ public class MinAggregationFunction extends BaseSingleInputAggregationFunction<D
     BlockValSet blockValSet = blockValSetMap.get(_expression);
     if (_nullHandlingEnabled) {
       RoaringBitmap nullBitmap = blockValSet.getNullBitmap();
-      if (nullBitmap == null) {
-        nullBitmap = new RoaringBitmap();
-      }
-      if (nullBitmap.getCardinality() < length) {
-        double[] valueArray = blockValSet.getDoubleValuesSV();
-        for (int i = 0; i < length; i++) {
-          double value = valueArray[i];
-          int groupKey = groupKeyArray[i];
-          Double result = groupByResultHolder.getResult(groupKey);
-          if (!nullBitmap.contains(i) && (result == null || value < result)) {
-            groupByResultHolder.setValueForKey(groupKey, value);
+      if (nullBitmap != null && !nullBitmap.isEmpty()) {
+        if (nullBitmap.getCardinality() < length) {
+          double[] valueArray = blockValSet.getDoubleValuesSV();
+          for (int i = 0; i < length; i++) {
+            double value = valueArray[i];
+            int groupKey = groupKeyArray[i];
+            Double result = groupByResultHolder.getResult(groupKey);
+            if (!nullBitmap.contains(i) && (result == null || value < result)) {
+              groupByResultHolder.setValueForKey(groupKey, value);
+            }
           }
         }
+        return;
       }
-      return;
     }
 
     double[] valueArray = blockValSet.getDoubleValuesSV();

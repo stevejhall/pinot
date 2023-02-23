@@ -187,14 +187,15 @@ public class RecordTransformerTest {
   }
 
   @Test
-  public void testTimeValidationTransformer() {
-    // Invalid timestamp, validation disabled
+  public void testDataTypeTransformerInvalidTimestamp() {
+    // Invalid Timestamp and Validation disabled
     String timeCol = "timeCol";
-    TableConfig tableConfig =
-        new TableConfigBuilder(TableType.OFFLINE).setTableName("testTable").setTimeColumnName(timeCol).build();
     Schema schema = new Schema.SchemaBuilder().addDateTime(timeCol, DataType.TIMESTAMP, "1:MILLISECONDS:TIMESTAMP",
         "1:MILLISECONDS").build();
-    RecordTransformer transformer = new TimeValidationTransformer(tableConfig, schema);
+    TableConfig tableConfig =
+        new TableConfigBuilder(TableType.OFFLINE).setTimeColumnName(timeCol).setTableName("testTable").build();
+
+    RecordTransformer transformer = new DataTypeTransformer(tableConfig, schema);
     GenericRow record = getRecord();
     record.putValue(timeCol, 1L);
     for (int i = 0; i < NUM_ROUNDS; i++) {
@@ -203,11 +204,15 @@ public class RecordTransformerTest {
       assertEquals(record.getValue(timeCol), 1L);
     }
 
-    // Invalid timestamp, validation enabled
+    // Invalid Timestamp and Validation enabled
     IngestionConfig ingestionConfig = new IngestionConfig();
     ingestionConfig.setRowTimeValueCheck(true);
-    tableConfig.setIngestionConfig(ingestionConfig);
-    RecordTransformer transformerWithValidation = new TimeValidationTransformer(tableConfig, schema);
+    tableConfig =
+        new TableConfigBuilder(TableType.OFFLINE).setTimeColumnName(timeCol)
+            .setIngestionConfig(ingestionConfig)
+            .setTableName("testTable").build();
+
+    RecordTransformer transformerWithValidation = new DataTypeTransformer(tableConfig, schema);
     GenericRow record1 = getRecord();
     record1.putValue(timeCol, 1L);
     for (int i = 0; i < NUM_ROUNDS; i++) {
@@ -215,8 +220,15 @@ public class RecordTransformerTest {
     }
 
     // Invalid timestamp, validation enabled and ignoreErrors enabled
+    ingestionConfig = new IngestionConfig();
+    ingestionConfig.setRowTimeValueCheck(true);
     ingestionConfig.setContinueOnError(true);
-    transformer = new TimeValidationTransformer(tableConfig, schema);
+    tableConfig =
+        new TableConfigBuilder(TableType.OFFLINE).setTimeColumnName(timeCol)
+            .setIngestionConfig(ingestionConfig)
+            .setTableName("testTable").build();
+
+    transformer = new DataTypeTransformer(tableConfig, schema);
     GenericRow record2 = getRecord();
     record2.putValue(timeCol, 1L);
     for (int i = 0; i < NUM_ROUNDS; i++) {
@@ -225,9 +237,8 @@ public class RecordTransformerTest {
       assertNull(record2.getValue(timeCol));
     }
 
-    // Valid timestamp, validation enabled
-    ingestionConfig.setContinueOnError(false);
-    transformer = new TimeValidationTransformer(tableConfig, schema);
+    // Valid timestamp
+    transformer = new DataTypeTransformer(TABLE_CONFIG, schema);
     GenericRow record3 = getRecord();
     Long currentTimeMillis = System.currentTimeMillis();
     record3.putValue(timeCol, currentTimeMillis);

@@ -191,6 +191,11 @@ public class TableRebalancerClusterStatelessTest extends ControllerTest {
         instancePartitions.getPartitionToInstancesMap());
     assertEquals(rebalanceResult.getSegmentAssignment(), newSegmentAssignment);
 
+    // ExternalView should match the new segment assignment
+    assertTrue(TableRebalancer.isExternalViewConverged(OFFLINE_TABLE_NAME,
+        _helixResourceManager.getTableExternalView(OFFLINE_TABLE_NAME).getRecord().getMapFields(), newSegmentAssignment,
+        false));
+
     // Update the table config to use replica-group based assignment
     InstanceTagPoolConfig tagPoolConfig =
         new InstanceTagPoolConfig(TagNameUtils.getOfflineTagForTenant(null), false, 0, null);
@@ -216,12 +221,12 @@ public class TableRebalancerClusterStatelessTest extends ControllerTest {
     assertEquals(instancePartitions.getInstances(0, 0),
         Arrays.asList(SERVER_INSTANCE_ID_PREFIX + 2, SERVER_INSTANCE_ID_PREFIX + 5));
     assertEquals(instancePartitions.getInstances(0, 1),
-        Arrays.asList(SERVER_INSTANCE_ID_PREFIX + 3, SERVER_INSTANCE_ID_PREFIX + 0));
+        Arrays.asList(SERVER_INSTANCE_ID_PREFIX + 0, SERVER_INSTANCE_ID_PREFIX + 3));
     assertEquals(instancePartitions.getInstances(0, 2),
-        Arrays.asList(SERVER_INSTANCE_ID_PREFIX + 4, SERVER_INSTANCE_ID_PREFIX + 1));
+        Arrays.asList(SERVER_INSTANCE_ID_PREFIX + 1, SERVER_INSTANCE_ID_PREFIX + 4));
 
-    // The assignment are based on replica-group 0 and mirrored to all the replica-groups, so server of index 0, 1, 5
-    // should have the same segments assigned, and server of index 2, 3, 4 should have the same segments assigned, each
+    // The assignment are based on replica-group 0 and mirrored to all the replica-groups, so server of index 0, 1, 2
+    // should have the same segments assigned, and server of index 3, 4, 5 should have the same segments assigned, each
     // with 5 segments
     newSegmentAssignment = rebalanceResult.getSegmentAssignment();
     int numSegmentsOnServer0 = 0;
@@ -233,14 +238,19 @@ public class TableRebalancerClusterStatelessTest extends ControllerTest {
         numSegmentsOnServer0++;
         assertEquals(instanceStateMap.get(SERVER_INSTANCE_ID_PREFIX + 0), ONLINE);
         assertEquals(instanceStateMap.get(SERVER_INSTANCE_ID_PREFIX + 1), ONLINE);
-        assertEquals(instanceStateMap.get(SERVER_INSTANCE_ID_PREFIX + 5), ONLINE);
-      } else {
         assertEquals(instanceStateMap.get(SERVER_INSTANCE_ID_PREFIX + 2), ONLINE);
+      } else {
         assertEquals(instanceStateMap.get(SERVER_INSTANCE_ID_PREFIX + 3), ONLINE);
         assertEquals(instanceStateMap.get(SERVER_INSTANCE_ID_PREFIX + 4), ONLINE);
+        assertEquals(instanceStateMap.get(SERVER_INSTANCE_ID_PREFIX + 5), ONLINE);
       }
     }
     assertEquals(numSegmentsOnServer0, numSegments / 2);
+
+    // ExternalView should match the segment assignment
+    assertTrue(TableRebalancer.isExternalViewConverged(OFFLINE_TABLE_NAME,
+        _helixResourceManager.getTableExternalView(OFFLINE_TABLE_NAME).getRecord().getMapFields(), newSegmentAssignment,
+        false));
 
     // Update the table config to use non-replica-group based assignment
     tableConfig.setInstanceAssignmentConfigMap(null);
@@ -392,7 +402,8 @@ public class TableRebalancerClusterStatelessTest extends ControllerTest {
       String expectedPrefix;
       if (fixedTierSegments.contains(segment)) {
         expectedPrefix = NO_TIER_NAME + "_" + SERVER_INSTANCE_ID_PREFIX;
-      } else if (segId > 4) {
+      } else
+        if (segId > 4) {
         expectedPrefix = TIER_B_NAME + "_" + SERVER_INSTANCE_ID_PREFIX;
       } else if (segId > 2) {
         expectedPrefix = TIER_A_NAME + "_" + SERVER_INSTANCE_ID_PREFIX;

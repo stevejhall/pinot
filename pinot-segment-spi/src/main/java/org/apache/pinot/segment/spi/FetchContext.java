@@ -83,8 +83,4 @@ public class FetchContext {
   public Map<String, List<ColumnIndexType>> getColumnToIndexList() {
     return _columnToIndexList;
   }
-
-  public boolean isEmpty() {
-    return _columnToIndexList.isEmpty();
-  }
 }

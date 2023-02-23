@@ -38,6 +38,11 @@ import org.apache.pinot.spi.data.FieldSpec.DataType;
 public class ArrayMaxTransformFunction extends BaseTransformFunction {
   public static final String FUNCTION_NAME = "arrayMax";
 
+  private int[] _intValuesSV;
+  private long[] _longValuesSV;
+  private float[] _floatValuesSV;
+  private double[] _doubleValuesSV;
+  private String[] _stringValuesSV;
   private TransformFunction _argument;
   private TransformResultMetadata _resultMetadata;
 
@@ -73,8 +78,10 @@ public class ArrayMaxTransformFunction extends BaseTransformFunction {
     if (_argument.getResultMetadata().getDataType().getStoredType() != DataType.INT) {
       return super.transformToIntValuesSV(projectionBlock);
     }
+
     int length = projectionBlock.getNumDocs();
-    if (_intValuesSV == null) {
+
+    if (_intValuesSV == null || _intValuesSV.length < length) {
       _intValuesSV = new int[length];
     }
     int[][] intValuesMV = _argument.transformToIntValuesMV(projectionBlock);
@@ -93,8 +100,10 @@ public class ArrayMaxTransformFunction extends BaseTransformFunction {
     if (_argument.getResultMetadata().getDataType().getStoredType() != DataType.LONG) {
       return super.transformToLongValuesSV(projectionBlock);
     }
+
     int length = projectionBlock.getNumDocs();
-    if (_longValuesSV == null) {
+
+    if (_longValuesSV == null || _longValuesSV.length < length) {
       _longValuesSV = new long[length];
     }
     long[][] longValuesMV = _argument.transformToLongValuesMV(projectionBlock);
@@ -113,8 +122,10 @@ public class ArrayMaxTransformFunction extends BaseTransformFunction {
     if (_argument.getResultMetadata().getDataType().getStoredType() != DataType.FLOAT) {
       return super.transformToFloatValuesSV(projectionBlock);
     }
+
     int length = projectionBlock.getNumDocs();
-    if (_floatValuesSV == null) {
+
+    if (_floatValuesSV == null || _floatValuesSV.length < length) {
       _floatValuesSV = new float[length];
     }
     float[][] floatValuesMV = _argument.transformToFloatValuesMV(projectionBlock);
@@ -133,8 +144,10 @@ public class ArrayMaxTransformFunction extends BaseTransformFunction {
     if (_argument.getResultMetadata().getDataType().getStoredType() != DataType.DOUBLE) {
       return super.transformToDoubleValuesSV(projectionBlock);
     }
+
     int length = projectionBlock.getNumDocs();
-    if (_doubleValuesSV == null) {
+
+    if (_doubleValuesSV == null || _doubleValuesSV.length < length) {
       _doubleValuesSV = new double[length];
     }
     double[][] doubleValuesMV = _argument.transformToDoubleValuesMV(projectionBlock);
@@ -153,8 +166,10 @@ public class ArrayMaxTransformFunction extends BaseTransformFunction {
     if (_argument.getResultMetadata().getDataType().getStoredType() != DataType.STRING) {
       return super.transformToStringValuesSV(projectionBlock);
     }
+
     int length = projectionBlock.getNumDocs();
-    if (_stringValuesSV == null) {
+
+    if (_stringValuesSV == null || _stringValuesSV.length < length) {
       _stringValuesSV = new String[length];
     }
     String[][] stringValuesMV = _argument.transformToStringValuesMV(projectionBlock);

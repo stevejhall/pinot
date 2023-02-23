@@ -110,6 +110,11 @@ public class SegmentPartitionLLCRealtimeClusterIntegrationTest extends BaseClust
     return _countStarResult;
   }
 
+  @Override
+  protected boolean useLlc() {
+    return true;
+  }
+
   @Nullable
   @Override
   protected String getPartitionColumn() {

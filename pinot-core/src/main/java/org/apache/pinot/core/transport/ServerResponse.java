@@ -30,7 +30,7 @@ import org.apache.pinot.common.datatable.DataTable;
 public class ServerResponse {
   private final long _startTimeMs;
   private volatile long _submitRequestTimeMs;
-  private volatile int _requestSentLatencyMs = -1;
+  private volatile long _requestSentLatencyMs;
   private volatile long _receiveDataTableTimeMs;
   private volatile DataTable _dataTable;
   private volatile int _responseSize;
@@ -54,7 +54,11 @@ public class ServerResponse {
   }
 
   public int getRequestSentDelayMs() {
-    return _requestSentLatencyMs;
+    if (_requestSentLatencyMs != 0) {
+      return (int) _requestSentLatencyMs;
+    } else {
+      return -1;
+    }
   }
 
   public int getResponseDelayMs() {
@@ -89,7 +93,7 @@ public class ServerResponse {
     _submitRequestTimeMs = System.currentTimeMillis();
   }
 
-  void markRequestSent(int requestSentLatencyMs) {
+  void markRequestSent(long requestSentLatencyMs) {
     _requestSentLatencyMs = requestSentLatencyMs;
   }
 

@@ -34,6 +34,7 @@ import org.apache.pinot.common.restlet.resources.SegmentErrorInfo;
 import org.apache.pinot.segment.local.segment.index.loader.IndexLoadingConfig;
 import org.apache.pinot.segment.spi.ImmutableSegment;
 import org.apache.pinot.segment.spi.SegmentMetadata;
+import org.apache.pinot.spi.config.table.TableConfig;
 import org.apache.pinot.spi.data.Schema;
 
 
@@ -62,8 +63,6 @@ public interface TableDataManager {
    */
   void shutDown();
 
-  boolean isShutDown();
-
   /**
    * Adds a loaded immutable segment into the table.
    */
@@ -79,7 +78,7 @@ public interface TableDataManager {
    * Adds a segment into the REALTIME table.
    * <p>The segment could be committed or under consuming.
    */
-  void addSegment(String segmentName, IndexLoadingConfig indexLoadingConfig, SegmentZKMetadata zkMetadata)
+  void addSegment(String segmentName, TableConfig tableConfig, IndexLoadingConfig indexLoadingConfig)
       throws Exception;
 
   /**
@@ -87,8 +86,6 @@ public interface TableDataManager {
    * A new segment may be downloaded if the local one has a different CRC; or can be forced to download
    * if forceDownload flag is true. This operation is conducted within a failure handling framework
    * and made transparent to ongoing queries, because the segment is in online serving state.
-   *
-   * TODO: Clean up this method to use the schema from the IndexLoadingConfig
    *
    * @param segmentName the segment to reload
    * @param indexLoadingConfig the latest table config to load segment
@@ -184,11 +181,6 @@ public interface TableDataManager {
   File getTableDataDir();
 
   /**
-   * Returns the config for the table data manager.
-   */
-  TableDataManagerConfig getTableDataManagerConfig();
-
-  /**
    * Add error related to segment, if any. The implementation
    * is expected to cache last 'N' errors for the table, related to
    * segment transitions.
@@ -202,20 +194,4 @@ public interface TableDataManager {
    * @return List of {@link SegmentErrorInfo}
    */
   Map<String, SegmentErrorInfo> getSegmentErrors();
-
-  /**
-   * Interface to handle segment state transitions from CONSUMING to DROPPED
-   *
-   * @param segmentNameStr name of segment for which the state change is being handled
-   */
-  default void onConsumingToDropped(String segmentNameStr) {
-  };
-
-  /**
-   * Interface to handle segment state transitions from CONSUMING to ONLINE
-   *
-   * @param segmentNameStr name of segment for which the state change is being handled
-   */
-  default void onConsumingToOnline(String segmentNameStr) {
-  };
 }

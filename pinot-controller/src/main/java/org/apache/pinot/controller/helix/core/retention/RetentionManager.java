@@ -20,7 +20,6 @@ package org.apache.pinot.controller.helix.core.retention;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -95,7 +94,7 @@ public class RetentionManager extends ControllerPeriodicTask<Void> {
   @Override
   protected void postprocess() {
     LOGGER.info("Removing aged deleted segments for all tables");
-    _pinotHelixResourceManager.getSegmentDeletionManager().removeAgedDeletedSegments(_leadControllerManager);
+    _pinotHelixResourceManager.getSegmentDeletionManager().removeAgedDeletedSegments();
   }
 
   private void manageRetentionForTable(TableConfig tableConfig) {
@@ -199,9 +198,8 @@ public class RetentionManager extends ControllerPeriodicTask<Void> {
     try {
       DEFAULT_RETRY_POLICY.attempt(() -> {
         // Fetch segment lineage
-        ZNRecord segmentLineageZNRecord =
-            SegmentLineageAccessHelper.getSegmentLineageZNRecord(_pinotHelixResourceManager.getPropertyStore(),
-                tableNameWithType);
+        ZNRecord segmentLineageZNRecord = SegmentLineageAccessHelper
+            .getSegmentLineageZNRecord(_pinotHelixResourceManager.getPropertyStore(), tableNameWithType);
         if (segmentLineageZNRecord == null) {
           return true;
         }
@@ -216,15 +214,15 @@ public class RetentionManager extends ControllerPeriodicTask<Void> {
         Set<String> segmentsForTable =
             new HashSet<>(_pinotHelixResourceManager.getSegmentsFor(tableNameWithType, false));
         List<String> segmentsToDelete = new ArrayList<>();
-        Iterator<LineageEntry> lineageEntryIterator = segmentLineage.getLineageEntries().values().iterator();
-        while (lineageEntryIterator.hasNext()) {
-          LineageEntry lineageEntry = lineageEntryIterator.next();
+        for (String lineageEntryId : segmentLineage.getLineageEntryIds()) {
+          LineageEntry lineageEntry = segmentLineage.getLineageEntry(lineageEntryId);
           if (lineageEntry.getState() == LineageEntryState.COMPLETED) {
             Set<String> sourceSegments = new HashSet<>(lineageEntry.getSegmentsFrom());
             sourceSegments.retainAll(segmentsForTable);
             if (sourceSegments.isEmpty()) {
-              // If the lineage state is 'COMPLETED' and segmentFrom are removed, it is safe clean up the lineage entry
-              lineageEntryIterator.remove();
+              // If the lineage state is 'COMPLETED' and segmentFrom are removed, it is safe clean up
+              // the lineage entry
+              segmentLineage.deleteLineageEntry(lineageEntryId);
             } else {
               // If the lineage state is 'COMPLETED' and we already preserved the original segments for the required
               // retention, it is safe to delete all segments from 'segmentsFrom'
@@ -243,7 +241,7 @@ public class RetentionManager extends ControllerPeriodicTask<Void> {
               // If the lineage state is 'IN_PROGRESS or REVERTED' and source segments are already removed, it is safe
               // to clean up the lineage entry. Deleting lineage will allow the task scheduler to re-schedule the source
               // segments to be merged again.
-              lineageEntryIterator.remove();
+              segmentLineage.deleteLineageEntry(lineageEntryId);
             } else {
               // If the lineage state is 'IN_PROGRESS', it is safe to delete all segments from 'segmentsTo'
               segmentsToDelete.addAll(destinationSegments);
@@ -252,8 +250,8 @@ public class RetentionManager extends ControllerPeriodicTask<Void> {
         }
 
         // Write back to the lineage entry
-        if (SegmentLineageAccessHelper.writeSegmentLineage(_pinotHelixResourceManager.getPropertyStore(),
-            segmentLineage, expectedVersion)) {
+        if (SegmentLineageAccessHelper
+            .writeSegmentLineage(_pinotHelixResourceManager.getPropertyStore(), segmentLineage, expectedVersion)) {
           // Delete segments based on the segment lineage
           if (!segmentsToDelete.isEmpty()) {
             _pinotHelixResourceManager.deleteSegments(tableNameWithType, segmentsToDelete);

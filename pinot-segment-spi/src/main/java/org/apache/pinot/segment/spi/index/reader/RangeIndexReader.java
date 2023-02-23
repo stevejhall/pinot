@@ -21,7 +21,6 @@ package org.apache.pinot.segment.spi.index.reader;
 import java.io.Closeable;
 import javax.annotation.Nullable;
 
-
 /**
  * Interface for indexed range queries
  * @param <T>
@@ -74,46 +73,6 @@ public interface RangeIndexReader<T> extends Closeable {
   int getNumMatchingDocs(double min, double max);
 
   /**
-   * Returns the number of docs with an equal value.
-   * The count is exact unless {@see getPartiallyMatchingDocIds} returns a non-null value.
-   * @param value the value
-   * @return the matching doc ids.
-   */
-  default int getNumMatchingDocs(int value) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Returns the number of docs with an equal value.
-   * The count is exact unless {@see getPartiallyMatchingDocIds} returns a non-null value.
-   * @param value the value
-   * @return the matching doc ids.
-   */
-  default int getNumMatchingDocs(long value) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Returns the number of docs with an equal value.
-   * The count is exact unless {@see getPartiallyMatchingDocIds} returns a non-null value.
-   * @param value the value
-   * @return the matching doc ids.
-   */
-  default int getNumMatchingDocs(float value) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Returns the number of docs with an equal value.
-   * The count is exact unless {@see getPartiallyMatchingDocIds} returns a non-null value.
-   * @param value the value
-   * @return the matching doc ids.
-   */
-  default int getNumMatchingDocs(double value) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
    * Returns doc ids with a value between min and max, both inclusive.
    * Doc ids returned by this method must correspond to values which
    * satisfy the query.
@@ -158,48 +117,16 @@ public interface RangeIndexReader<T> extends Closeable {
   T getMatchingDocIds(double min, double max);
 
   /**
-   * Returns doc ids with an equal value.
-   * Doc ids returned by this method must correspond to values which
-   * satisfy the query.
-   * @param value the value
+   * Returns doc ids with a value between min and max, both inclusive.
+   * Doc ids returned by this method may correspond to values which
+   * satisfy the query, and require post filtering. If the implementation
+   * supports exact matches, this method will return null.
+   * @param min the inclusive lower bound.
+   * @param max the inclusive upper bound.
    * @return the matching doc ids.
    */
-  default T getMatchingDocIds(int value) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Returns doc ids with an equal value.
-   * Doc ids returned by this method must correspond to values which
-   * satisfy the query.
-   * @param value the value
-   * @return the matching doc ids.
-   */
-  default T getMatchingDocIds(long value) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Returns doc ids with an equal value.
-   * Doc ids returned by this method must correspond to values which
-   * satisfy the query.
-   * @param value the value
-   * @return the matching doc ids.
-   */
-  default T getMatchingDocIds(float value) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Returns doc ids with an equal value.
-   * Doc ids returned by this method must correspond to values which
-   * satisfy the query.
-   * @param value the value
-   * @return the matching doc ids.
-   */
-  default T getMatchingDocIds(double value) {
-    throw new UnsupportedOperationException();
-  }
+  @Nullable
+  T getPartiallyMatchingDocIds(int min, int max);
 
   /**
    * Returns doc ids with a value between min and max, both inclusive.
@@ -211,9 +138,7 @@ public interface RangeIndexReader<T> extends Closeable {
    * @return the matching doc ids.
    */
   @Nullable
-  default T getPartiallyMatchingDocIds(int min, int max) {
-    return null;
-  }
+  T getPartiallyMatchingDocIds(long min, long max);
 
   /**
    * Returns doc ids with a value between min and max, both inclusive.
@@ -225,9 +150,7 @@ public interface RangeIndexReader<T> extends Closeable {
    * @return the matching doc ids.
    */
   @Nullable
-  default T getPartiallyMatchingDocIds(long min, long max) {
-    return null;
-  }
+  T getPartiallyMatchingDocIds(float min, float max);
 
   /**
    * Returns doc ids with a value between min and max, both inclusive.
@@ -239,21 +162,5 @@ public interface RangeIndexReader<T> extends Closeable {
    * @return the matching doc ids.
    */
   @Nullable
-  default T getPartiallyMatchingDocIds(float min, float max) {
-    return null;
-  }
-
-  /**
-   * Returns doc ids with a value between min and max, both inclusive.
-   * Doc ids returned by this method may correspond to values which
-   * satisfy the query, and require post filtering. If the implementation
-   * supports exact matches, this method will return null.
-   * @param min the inclusive lower bound.
-   * @param max the inclusive upper bound.
-   * @return the matching doc ids.
-   */
-  @Nullable
-  default T getPartiallyMatchingDocIds(double min, double max) {
-    return null;
-  }
+  T getPartiallyMatchingDocIds(double min, double max);
 }

@@ -97,6 +97,11 @@ public class DedupIntegrationTest extends BaseClusterIntegrationTestSet {
   }
 
   @Override
+  protected boolean useLlc() {
+    return true;
+  }
+
+  @Override
   protected String getPartitionColumn() {
     return "id";
   }

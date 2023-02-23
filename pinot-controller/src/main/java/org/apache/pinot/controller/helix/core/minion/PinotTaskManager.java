@@ -541,32 +541,20 @@ public class PinotTaskManager extends ControllerPeriodicTask<Void> {
         generateTasks() return a list of TaskGeneratorMostRecentRunInfo for each table
        */
       pinotTaskConfigs = taskGenerator.generateTasks(enabledTableConfigs);
-      long successRunTimestamp = System.currentTimeMillis();
       for (TableConfig tableConfig : enabledTableConfigs) {
         _taskManagerStatusCache.saveTaskGeneratorInfo(tableConfig.getTableName(), taskGenerator.getTaskType(),
-            taskGeneratorMostRecentRunInfo -> taskGeneratorMostRecentRunInfo.addSuccessRunTs(successRunTimestamp));
-        // before the first task schedule, the follow two gauge metrics will be empty
-        // TODO: find a better way to report task generation information
-        _controllerMetrics.setOrUpdateTableGauge(tableConfig.getTableName(), taskGenerator.getTaskType(),
-            ControllerGauge.TIME_MS_SINCE_LAST_SUCCESSFUL_MINION_TASK_GENERATION,
-            () -> System.currentTimeMillis() - successRunTimestamp);
-        _controllerMetrics.setOrUpdateTableGauge(tableConfig.getTableName(), taskGenerator.getTaskType(),
-            ControllerGauge.LAST_MINION_TASK_GENERATION_ENCOUNTERS_ERROR, 0L);
+            taskGeneratorMostRecentRunInfo -> taskGeneratorMostRecentRunInfo.addSuccessRunTs(
+                System.currentTimeMillis()));
       }
     } catch (Exception e) {
       StringWriter errors = new StringWriter();
       try (PrintWriter pw = new PrintWriter(errors)) {
         e.printStackTrace(pw);
       }
-      long successRunTimestamp = System.currentTimeMillis();
       for (TableConfig tableConfig : enabledTableConfigs) {
         _taskManagerStatusCache.saveTaskGeneratorInfo(tableConfig.getTableName(), taskGenerator.getTaskType(),
             taskGeneratorMostRecentRunInfo -> taskGeneratorMostRecentRunInfo.addErrorRunMessage(
-                successRunTimestamp, errors.toString()));
-        // before the first task schedule, the follow gauge metric will be empty
-        // TODO: find a better way to report task generation information
-        _controllerMetrics.setOrUpdateTableGauge(tableConfig.getTableName(), taskGenerator.getTaskType(),
-            ControllerGauge.LAST_MINION_TASK_GENERATION_ENCOUNTERS_ERROR, 1L);
+                System.currentTimeMillis(), errors.toString()));
       }
       throw e;
     }
@@ -589,6 +577,7 @@ public class PinotTaskManager extends ControllerPeriodicTask<Void> {
    * Public API to schedule tasks (all task types) for the given table. It might be called from the non-leader
    * controller. Returns a map from the task type to the task scheduled.
    */
+  @Nullable
   public synchronized Map<String, String> scheduleTasks(String tableNameWithType) {
     return scheduleTasks(Collections.singletonList(tableNameWithType), false);
   }

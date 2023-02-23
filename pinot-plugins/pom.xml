@@ -26,7 +26,7 @@
   <parent>
     <artifactId>pinot</artifactId>
     <groupId>org.apache.pinot</groupId>
-    <version>0.13.0-SNAPSHOT</version>
+    <version>0.12.0-SNAPSHOT</version>
     <relativePath>..</relativePath>
   </parent>
   <artifactId>pinot-plugins</artifactId>
@@ -138,6 +138,12 @@
                       <pattern>org.apache.parquet</pattern>
                       <shadedPattern>${shade.prefix}.org.apache.parquet</shadedPattern>
                     </relocation>
+                    <!-- Added by Nike -->
+                    <relocation>
+                      <pattern>io.strimzi</pattern>
+                      <shadedPattern>${shade.prefix}.io.strimzi</shadedPattern>
+                    </relocation>
+                    <!-- End Added by Nike -->
                     <relocation>
                       <pattern>org.apache.kafka</pattern>
                       <shadedPattern>${shade.prefix}.org.apache.kafka</shadedPattern>

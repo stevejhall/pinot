@@ -134,7 +134,6 @@ public class SelectionOnlyOperator extends BaseOperator<SelectionResultsBlock> {
     return Collections.singletonList(_transformOperator);
   }
 
-  @Override
   public IndexSegment getIndexSegment() {
     return _indexSegment;
   }

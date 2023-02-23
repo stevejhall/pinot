@@ -73,7 +73,6 @@ public class StartControllerCommand extends AbstractBaseAdminCommand implements 
   // This can be set via the set method, or via config file input.
   private boolean _tenantIsolation = true;
 
-  @CommandLine.Option(names = {"-configOverride"}, required = false, split = ",")
   private Map<String, Object> _configOverrides = new HashMap<>();
 
   @Override
@@ -202,13 +201,11 @@ public class StartControllerCommand extends AbstractBaseAdminCommand implements 
     Map<String, Object> properties = new HashMap<>();
     if (_configFileName != null) {
       properties.putAll(PinotConfigUtils.generateControllerConf(_configFileName));
-      ControllerConf conf = new ControllerConf(properties);
-
       // Override the zkAddress and clusterName to ensure ServiceManager is connecting to the right Zookeeper and
       // Cluster.
       // Configs existence is already verified.
-      _zkAddress = conf.getZkStr();
-      _clusterName = conf.getHelixClusterName();
+      _zkAddress = properties.get(ControllerConf.ZK_STR).toString();
+      _clusterName = properties.get(ControllerConf.HELIX_CLUSTER_NAME).toString();
     } else {
       if (_controllerHost == null) {
         _controllerHost = NetUtils.getHostAddress();

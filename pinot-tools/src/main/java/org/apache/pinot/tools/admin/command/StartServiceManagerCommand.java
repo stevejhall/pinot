@@ -198,8 +198,8 @@ public class StartServiceManagerCommand extends AbstractBaseAdminCommand impleme
         savePID(System.getProperty("java.io.tmpdir") + File.separator + pidFile);
         return true;
       }
-    } catch (Throwable t) {
-      LOGGER.error("Caught exception while starting pinot service, exiting.", t);
+    } catch (Exception e) {
+      LOGGER.error("Caught exception while starting pinot service, exiting.", e);
     }
     System.exit(-1);
     return false;
@@ -303,8 +303,8 @@ public class StartServiceManagerCommand extends AbstractBaseAdminCommand impleme
       LOGGER.info("Starting a Pinot [{}] at {}s since launch", role, startOffsetSeconds());
       String instanceId = serviceStarter.call();
       LOGGER.info("Started Pinot [{}] instance [{}] at {}s since launch", role, instanceId, startOffsetSeconds());
-    } catch (Throwable t) {
-      LOGGER.error(String.format("Failed to start a Pinot [%s] at %s since launch", role, startOffsetSeconds()), t);
+    } catch (Exception e) {
+      LOGGER.error(String.format("Failed to start a Pinot [%s] at %s since launch", role, startOffsetSeconds()), e);
       return false;
     }
     return true;

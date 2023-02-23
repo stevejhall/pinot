@@ -19,6 +19,7 @@
 package org.apache.pinot.segment.local.segment.index.loader.columnminmaxvalue;
 
 import com.google.common.base.Preconditions;
+import java.io.FileOutputStream;
 import java.util.HashSet;
 import java.util.Set;
 import org.apache.commons.configuration.PropertiesConfiguration;
@@ -30,31 +31,28 @@ import org.apache.pinot.segment.local.segment.index.readers.IntDictionary;
 import org.apache.pinot.segment.local.segment.index.readers.LongDictionary;
 import org.apache.pinot.segment.local.segment.index.readers.StringDictionary;
 import org.apache.pinot.segment.spi.ColumnMetadata;
-import org.apache.pinot.segment.spi.SegmentMetadata;
+import org.apache.pinot.segment.spi.index.metadata.SegmentMetadataImpl;
 import org.apache.pinot.segment.spi.memory.PinotDataBuffer;
 import org.apache.pinot.segment.spi.store.ColumnIndexType;
 import org.apache.pinot.segment.spi.store.SegmentDirectory;
-import org.apache.pinot.segment.spi.utils.SegmentMetadataUtils;
 import org.apache.pinot.spi.data.Schema;
 
 import static org.apache.pinot.spi.data.FieldSpec.DataType;
 
 
 public class ColumnMinMaxValueGenerator {
-  private final SegmentMetadata _segmentMetadata;
+  private final SegmentMetadataImpl _segmentMetadata;
+  private final PropertiesConfiguration _segmentProperties;
   private final SegmentDirectory.Writer _segmentWriter;
   private final ColumnMinMaxValueGeneratorMode _columnMinMaxValueGeneratorMode;
 
-  // NOTE: _segmentProperties shouldn't be used when checking whether min/max value need to be generated because at that
-  //       time _segmentMetadata might not be loaded from a local file
-  private PropertiesConfiguration _segmentProperties;
-
   private boolean _minMaxValueAdded;
 
-  public ColumnMinMaxValueGenerator(SegmentMetadata segmentMetadata, SegmentDirectory.Writer segmentWriter,
+  public ColumnMinMaxValueGenerator(SegmentMetadataImpl segmentMetadata, SegmentDirectory.Writer segmentWriter,
       ColumnMinMaxValueGeneratorMode columnMinMaxValueGeneratorMode) {
     _segmentMetadata = segmentMetadata;
     _segmentWriter = segmentWriter;
+    _segmentProperties = segmentMetadata.getPropertiesConfiguration();
     _columnMinMaxValueGeneratorMode = columnMinMaxValueGeneratorMode;
   }
 
@@ -70,13 +68,10 @@ public class ColumnMinMaxValueGenerator {
   public void addColumnMinMaxValue()
       throws Exception {
     Preconditions.checkState(_columnMinMaxValueGeneratorMode != ColumnMinMaxValueGeneratorMode.NONE);
-    _segmentProperties = SegmentMetadataUtils.getPropertiesConfiguration(_segmentMetadata);
     for (String column : getColumnsToAddMinMaxValue()) {
       addColumnMinMaxValueForColumn(column);
     }
-    if (_minMaxValueAdded) {
-      SegmentMetadataUtils.savePropertiesConfiguration(_segmentProperties);
-    }
+    saveMetadata();
   }
 
   private Set<String> getColumnsToAddMinMaxValue() {
@@ -121,40 +116,46 @@ public class ColumnMinMaxValueGenerator {
     switch (dataType) {
       case INT:
         try (IntDictionary intDictionary = new IntDictionary(dictionaryBuffer, length)) {
-          SegmentColumnarIndexCreator.addColumnMinMaxValueInfo(_segmentProperties, columnName,
-              intDictionary.getStringValue(0), intDictionary.getStringValue(length - 1));
+          SegmentColumnarIndexCreator
+              .addColumnMinMaxValueInfo(_segmentProperties, columnName, intDictionary.getStringValue(0),
+                  intDictionary.getStringValue(length - 1));
         }
         break;
       case LONG:
         try (LongDictionary longDictionary = new LongDictionary(dictionaryBuffer, length)) {
-          SegmentColumnarIndexCreator.addColumnMinMaxValueInfo(_segmentProperties, columnName,
-              longDictionary.getStringValue(0), longDictionary.getStringValue(length - 1));
+          SegmentColumnarIndexCreator
+              .addColumnMinMaxValueInfo(_segmentProperties, columnName, longDictionary.getStringValue(0),
+                  longDictionary.getStringValue(length - 1));
         }
         break;
       case FLOAT:
         try (FloatDictionary floatDictionary = new FloatDictionary(dictionaryBuffer, length)) {
-          SegmentColumnarIndexCreator.addColumnMinMaxValueInfo(_segmentProperties, columnName,
-              floatDictionary.getStringValue(0), floatDictionary.getStringValue(length - 1));
+          SegmentColumnarIndexCreator
+              .addColumnMinMaxValueInfo(_segmentProperties, columnName, floatDictionary.getStringValue(0),
+                  floatDictionary.getStringValue(length - 1));
         }
         break;
       case DOUBLE:
         try (DoubleDictionary doubleDictionary = new DoubleDictionary(dictionaryBuffer, length)) {
-          SegmentColumnarIndexCreator.addColumnMinMaxValueInfo(_segmentProperties, columnName,
-              doubleDictionary.getStringValue(0), doubleDictionary.getStringValue(length - 1));
+          SegmentColumnarIndexCreator
+              .addColumnMinMaxValueInfo(_segmentProperties, columnName, doubleDictionary.getStringValue(0),
+                  doubleDictionary.getStringValue(length - 1));
         }
         break;
       case STRING:
         try (StringDictionary stringDictionary = new StringDictionary(dictionaryBuffer, length,
-            columnMetadata.getColumnMaxLength())) {
-          SegmentColumnarIndexCreator.addColumnMinMaxValueInfo(_segmentProperties, columnName,
-              stringDictionary.getStringValue(0), stringDictionary.getStringValue(length - 1));
+            columnMetadata.getColumnMaxLength(), (byte) columnMetadata.getPaddingCharacter())) {
+          SegmentColumnarIndexCreator
+              .addColumnMinMaxValueInfo(_segmentProperties, columnName, stringDictionary.getStringValue(0),
+                  stringDictionary.getStringValue(length - 1));
         }
         break;
       case BYTES:
         try (BytesDictionary bytesDictionary = new BytesDictionary(dictionaryBuffer, length,
             columnMetadata.getColumnMaxLength())) {
-          SegmentColumnarIndexCreator.addColumnMinMaxValueInfo(_segmentProperties, columnName,
-              bytesDictionary.getStringValue(0), bytesDictionary.getStringValue(length - 1));
+          SegmentColumnarIndexCreator
+              .addColumnMinMaxValueInfo(_segmentProperties, columnName, bytesDictionary.getStringValue(0),
+                  bytesDictionary.getStringValue(length - 1));
         }
         break;
       default:
@@ -162,5 +163,16 @@ public class ColumnMinMaxValueGenerator {
     }
 
     _minMaxValueAdded = true;
+  }
+
+  private void saveMetadata()
+      throws Exception {
+    if (_minMaxValueAdded) {
+      // Commons Configuration 1.10 does not support file path containing '%'.
+      // Explicitly providing the output stream for the file bypasses the problem.
+      try (FileOutputStream fileOutputStream = new FileOutputStream(_segmentProperties.getFile())) {
+        _segmentProperties.save(fileOutputStream);
+      }
+    }
   }
 }

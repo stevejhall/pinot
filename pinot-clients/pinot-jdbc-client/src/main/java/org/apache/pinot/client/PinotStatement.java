@@ -28,7 +28,7 @@ import org.apache.pinot.client.utils.DriverUtils;
 public class PinotStatement extends AbstractBaseStatement {
   private static final String LIMIT_STATEMENT = "LIMIT";
 
-  private final PinotConnection _connection;
+  private final Connection _connection;
   private final org.apache.pinot.client.Connection _session;
   private boolean _closed;
   private ResultSet _resultSet;
@@ -63,8 +63,7 @@ public class PinotStatement extends AbstractBaseStatement {
       if (!DriverUtils.queryContainsLimitStatement(sql)) {
         sql += " " + LIMIT_STATEMENT + " " + _maxRows;
       }
-      String enabledSql = DriverUtils.enableNullHandling(_connection, sql);
-      ResultSetGroup resultSetGroup = _session.execute(enabledSql);
+      ResultSetGroup resultSetGroup = _session.execute(sql);
       if (resultSetGroup.getResultSetCount() == 0) {
         _resultSet = PinotResultSet.empty();
         return _resultSet;

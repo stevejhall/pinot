@@ -26,7 +26,7 @@
   <parent>
     <artifactId>pinot-stream-ingestion</artifactId>
     <groupId>org.apache.pinot</groupId>
-    <version>0.13.0-SNAPSHOT</version>
+    <version>0.12.0-SNAPSHOT</version>
     <relativePath>..</relativePath>
   </parent>
 
@@ -231,7 +231,7 @@
                   <!-- combine.self="override" needs to be specified as without this attribute child pom appears to merge
                    shade plugin configurations in its parents pom.Notably the shade plugin configuration in the root pom declares a mainClass which 
                    causes the build to fail - https://github.com/apache/pinot/blob/master/pom.xml#L1880
-                   The build will fail with the message "Unable to parse configuration of mojo org.apache.maven.plugins:maven-shade-plugin:3.2.1:shade 
+                   The build will fail with the message "Unable to parse configuration of mojo org.apache.maven.plugins:maven-shade-plugin:3.2.1:shade
                    for parameter mainClass: Cannot find 'mainClass' in class org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" error
                    Adding "combine.self" attribute in the child pom's configuration will allow maven to execute the shade plugin independently from the
                    parent pom. For more details please see https://github.com/stevenschlansker/maven-configure-transformer-bug & 

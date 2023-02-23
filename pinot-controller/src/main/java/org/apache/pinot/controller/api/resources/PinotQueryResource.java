@@ -45,7 +45,6 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.pinot.common.Utils;
@@ -315,8 +314,7 @@ public class PinotQueryResource {
         LOGGER.info("The http response code is " + responseCode);
       }*/
       if (responseCode != HttpURLConnection.HTTP_OK) {
-        throw new IOException("Failed : HTTP error code : " + responseCode + ". Root Cause: "
-            + IOUtils.toString(conn.getErrorStream(), StandardCharsets.UTF_8));
+        throw new IOException("Failed : HTTP error code : " + responseCode);
       }
       final byte[] bytes = drain(new BufferedInputStream(conn.getInputStream()));
 

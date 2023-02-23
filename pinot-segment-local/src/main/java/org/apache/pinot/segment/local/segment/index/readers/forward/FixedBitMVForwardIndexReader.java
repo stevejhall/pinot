@@ -172,7 +172,6 @@ public final class FixedBitMVForwardIndexReader implements ForwardIndexReader<Fi
     return dictIdBuffer;
   }
 
-  @Override
   public int getNumValuesMV(int docId, Context context) {
     int contextDocId = context._docId;
     int contextEndOffset = context._endOffset;

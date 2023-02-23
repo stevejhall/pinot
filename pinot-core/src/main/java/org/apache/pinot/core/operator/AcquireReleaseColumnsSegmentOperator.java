@@ -69,7 +69,7 @@ public class AcquireReleaseColumnsSegmentOperator extends BaseOperator<BaseResul
   public void acquire() {
     // do not acquire if interrupted (similar to the check inside the nextBlock())
     if (Thread.interrupted()) {
-      throw new EarlyTerminationException("Interrupted while acquiring segment");
+      throw new EarlyTerminationException();
     }
     _indexSegment.acquire(_fetchContext);
   }
@@ -81,6 +81,7 @@ public class AcquireReleaseColumnsSegmentOperator extends BaseOperator<BaseResul
     _indexSegment.release(_fetchContext);
   }
 
+
   @Override
   public String toExplainString() {
     return EXPLAIN_NAME;
@@ -91,7 +92,6 @@ public class AcquireReleaseColumnsSegmentOperator extends BaseOperator<BaseResul
     return Collections.singletonList(_childOperator);
   }
 
-  @Override
   public IndexSegment getIndexSegment() {
     return _indexSegment;
   }

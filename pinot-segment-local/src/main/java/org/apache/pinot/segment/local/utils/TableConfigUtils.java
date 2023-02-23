@@ -31,7 +31,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
@@ -43,7 +42,6 @@ import org.apache.pinot.common.tier.TierFactory;
 import org.apache.pinot.common.utils.config.TagNameUtils;
 import org.apache.pinot.segment.local.function.FunctionEvaluator;
 import org.apache.pinot.segment.local.function.FunctionEvaluatorFactory;
-import org.apache.pinot.segment.local.segment.creator.impl.inv.BitSlicedRangeIndexCreator;
 import org.apache.pinot.segment.spi.AggregationFunctionType;
 import org.apache.pinot.segment.spi.index.startree.AggregationFunctionColumnPair;
 import org.apache.pinot.spi.config.table.FieldConfig;
@@ -101,9 +99,6 @@ public final class TableConfigUtils {
   private static final EnumSet<AggregationFunctionType> SUPPORTED_INGESTION_AGGREGATIONS =
       EnumSet.of(AggregationFunctionType.SUM, AggregationFunctionType.MIN, AggregationFunctionType.MAX,
           AggregationFunctionType.COUNT);
-  private static final Set<String> UPSERT_DEDUP_ALLOWED_ROUTING_STRATEGIES =
-      ImmutableSet.of(RoutingConfig.STRICT_REPLICA_GROUP_INSTANCE_SELECTOR_TYPE,
-          RoutingConfig.MULTI_STAGE_REPLICA_GROUP_SELECTOR_TYPE);
 
   /**
    * @see TableConfigUtils#validate(TableConfig, Schema, String, boolean)
@@ -307,15 +302,12 @@ public final class TableConfigUtils {
             "Should not use indexingConfig#getStreamConfigs if ingestionConfig#StreamIngestionConfig is provided");
         List<Map<String, String>> streamConfigMaps = ingestionConfig.getStreamIngestionConfig().getStreamConfigMaps();
         Preconditions.checkState(streamConfigMaps.size() == 1, "Only 1 stream is supported in REALTIME table");
-
-        StreamConfig streamConfig;
         try {
           // Validate that StreamConfig can be created
-          streamConfig = new StreamConfig(tableNameWithType, streamConfigMaps.get(0));
+          new StreamConfig(tableNameWithType, streamConfigMaps.get(0));
         } catch (Exception e) {
           throw new IllegalStateException("Could not create StreamConfig using the streamConfig map", e);
         }
-        validateDecoder(streamConfig);
       }
 
       // Filter config
@@ -466,19 +458,6 @@ public final class TableConfigUtils {
   }
 
   @VisibleForTesting
-  static void validateDecoder(StreamConfig streamConfig) {
-    if (streamConfig.getDecoderClass().equals("org.apache.pinot.plugin.inputformat.protobuf.ProtoBufMessageDecoder")) {
-      // check the existence of the needed decoder props
-      if (!streamConfig.getDecoderProperties().containsKey("stream.kafka.decoder.prop.descriptorFile")) {
-        throw new IllegalStateException("Missing property of descriptorFile for ProtoBufMessageDecoder");
-      }
-      if (!streamConfig.getDecoderProperties().containsKey("stream.kafka.decoder.prop.protoClassName")) {
-        throw new IllegalStateException("Missing property of protoClassName for ProtoBufMessageDecoder");
-      }
-    }
-  }
-
-  @VisibleForTesting
   static void validateTaskConfigs(TableConfig tableConfig, Schema schema) {
     TableTaskConfig taskConfig = tableConfig.getTaskConfig();
     if (taskConfig != null) {
@@ -561,7 +540,8 @@ public final class TableConfigUtils {
         "Upsert/Dedup table must use low-level streaming consumer type");
     // replica group is configured for routing
     Preconditions.checkState(tableConfig.getRoutingConfig() != null
-            && isRoutingStrategyAllowedForUpsert(tableConfig.getRoutingConfig()),
+            && RoutingConfig.STRICT_REPLICA_GROUP_INSTANCE_SELECTOR_TYPE.equalsIgnoreCase(
+            tableConfig.getRoutingConfig().getInstanceSelectorType()),
         "Upsert/Dedup table must use strict replica-group (i.e. strictReplicaGroup) based routing");
 
     // specifically for upsert
@@ -774,17 +754,10 @@ public final class TableConfigUtils {
         columnNameToConfigMap.put(columnName, "Segment Partition Config");
       }
     }
-    Set<String> jsonIndexColumns = new HashSet<>();
-    // Ignore jsonIndexColumns when jsonIndexConfigs is configured
-    if (indexingConfig.getJsonIndexConfigs() != null) {
-      jsonIndexColumns.addAll(indexingConfig.getJsonIndexConfigs().keySet());
-    } else {
-      if (indexingConfig.getJsonIndexColumns() != null) {
-        jsonIndexColumns.addAll(indexingConfig.getJsonIndexColumns());
+    if (indexingConfig.getJsonIndexColumns() != null) {
+      for (String columnName : indexingConfig.getJsonIndexColumns()) {
+        columnNameToConfigMap.put(columnName, "Json Index Config");
       }
-    }
-    for (String columnName : jsonIndexColumns) {
-      columnNameToConfigMap.put(columnName, "Json Index Config");
     }
 
     List<StarTreeIndexConfig> starTreeIndexConfigList = indexingConfig.getStarTreeIndexConfigs();
@@ -855,11 +828,13 @@ public final class TableConfigUtils {
       }
     }
 
-    for (String jsonIndexColumn : jsonIndexColumns) {
-      FieldSpec fieldSpec = schema.getFieldSpecFor(jsonIndexColumn);
-      Preconditions.checkState(
-          fieldSpec.isSingleValueField() && fieldSpec.getDataType().getStoredType() == DataType.STRING,
-          "Json index can only be created for single value String column. Invalid for column: %s", jsonIndexColumn);
+    if (indexingConfig.getJsonIndexColumns() != null) {
+      for (String jsonIndexCol : indexingConfig.getJsonIndexColumns()) {
+        FieldSpec fieldSpec = schema.getFieldSpecFor(jsonIndexCol);
+        Preconditions.checkState(
+            fieldSpec.isSingleValueField() && fieldSpec.getDataType().getStoredType() == DataType.STRING,
+            "Json index can only be created for single value String column. Invalid for column: %s", jsonIndexCol);
+      }
     }
   }
 
@@ -867,7 +842,6 @@ public final class TableConfigUtils {
    * Validates the Field Config List in the given TableConfig
    * Ensures that every referred column name exists in the corresponding schema
    * Additional checks for TEXT and FST index types
-   * Validates index compatibility for forward index disabled columns
    */
   private static void validateFieldConfigList(@Nullable List<FieldConfig> fieldConfigList,
       @Nullable IndexingConfig indexingConfigs, @Nullable Schema schema) {
@@ -895,10 +869,6 @@ public final class TableConfigUtils {
           default:
             break;
         }
-
-        // Validate the forward index disabled compatibility with other indexes if enabled for this column
-        validateForwardIndexDisabledIndexCompatibility(columnName, fieldConfig, indexingConfigs, noDictionaryColumns,
-            schema);
       }
 
       if (CollectionUtils.isNotEmpty(fieldConfig.getIndexTypes())) {
@@ -924,44 +894,6 @@ public final class TableConfigUtils {
           }
         }
       }
-    }
-  }
-
-  /**
-   * Validates the compatibility of the indexes if the column has the forward index disabled. Throws exceptions due to
-   * compatibility mismatch. The checks performed are:
-   *     - Validate dictionary is enabled.
-   *     - Validate inverted index is enabled.
-   *     - Validate that either no range index exists for column or the range index version is at least 2 and isn't a
-   *       multi-value column (since mulit-value defaults to index v1).
-   */
-  private static void validateForwardIndexDisabledIndexCompatibility(String columnName, FieldConfig fieldConfig,
-      IndexingConfig indexingConfigs, List<String> noDictionaryColumns, Schema schema) {
-    Map<String, String> fieldConfigProperties = fieldConfig.getProperties();
-    if (fieldConfigProperties == null) {
-      return;
-    }
-
-    boolean forwardIndexDisabled = Boolean.parseBoolean(fieldConfigProperties.get(FieldConfig.FORWARD_INDEX_DISABLED));
-    if (!forwardIndexDisabled) {
-      return;
-    }
-
-    FieldSpec fieldSpec = schema.getFieldSpecFor(columnName);
-    Preconditions.checkState(fieldConfig.getEncodingType() == FieldConfig.EncodingType.DICTIONARY
-            || noDictionaryColumns == null || !noDictionaryColumns.contains(columnName),
-        String.format("Forward index disabled column %s must have dictionary enabled", columnName));
-    Preconditions.checkState(indexingConfigs.getInvertedIndexColumns() != null
-            && indexingConfigs.getInvertedIndexColumns().contains(columnName),
-        String.format("Forward index disabled column %s must have inverted index enabled", columnName));
-    if (indexingConfigs.getRangeIndexColumns() != null && indexingConfigs.getRangeIndexColumns().contains(columnName)) {
-      Preconditions.checkState(fieldSpec.isSingleValueField(), String.format("Feature not supported for multi-value "
-          + "columns with range index. Cannot disable forward index for column %s. Disable range index on this "
-          + "column to use this feature", columnName));
-      Preconditions.checkState(indexingConfigs.getRangeIndexVersion() == BitSlicedRangeIndexCreator.VERSION,
-          String.format("Feature not supported for single-value columns with range index version < 2. Cannot disable "
-              + "forward index for column %s. Either disable range index or create range index with"
-              + " version >= 2 to use this feature", columnName));
     }
   }
 
@@ -991,9 +923,6 @@ public final class TableConfigUtils {
   }
 
   /**
-   * TODO: After deprecating "replicasPerPartition", we can change this function's behavior to always overwrite
-   * config to "replication" only.
-   *
    * Ensure that the table config has the minimum number of replicas set as per cluster configs.
    * If is doesn't, set the required amount of replication in the table config
    */
@@ -1014,7 +943,7 @@ public final class TableConfigUtils {
     if (verifyReplication) {
       int requestReplication;
       try {
-        requestReplication = tableConfig.getReplication();
+        requestReplication = segmentsConfig.getReplicationNumber();
         if (requestReplication < defaultTableMinReplicas) {
           LOGGER.info("Creating table with minimum replication factor of: {} instead of requested replication: {}",
               defaultTableMinReplicas, requestReplication);
@@ -1026,9 +955,12 @@ public final class TableConfigUtils {
     }
 
     if (verifyReplicasPerPartition) {
-      int replicasPerPartition;
+      String replicasPerPartitionStr = segmentsConfig.getReplicasPerPartition();
+      if (replicasPerPartitionStr == null) {
+        throw new IllegalStateException("Field replicasPerPartition needs to be specified");
+      }
       try {
-        replicasPerPartition = tableConfig.getReplication();
+        int replicasPerPartition = Integer.parseInt(replicasPerPartitionStr);
         if (replicasPerPartition < defaultTableMinReplicas) {
           LOGGER.info(
               "Creating table with minimum replicasPerPartition of: {} instead of requested replicasPerPartition: {}",
@@ -1036,7 +968,7 @@ public final class TableConfigUtils {
           segmentsConfig.setReplicasPerPartition(String.valueOf(defaultTableMinReplicas));
         }
       } catch (NumberFormatException e) {
-        throw new IllegalStateException("Invalid replicasPerPartition number", e);
+        throw new IllegalStateException("Invalid value for replicasPerPartition: '" + replicasPerPartitionStr + "'", e);
       }
     }
   }
@@ -1150,10 +1082,5 @@ public final class TableConfigUtils {
       }
     }
     return false;
-  }
-
-  private static boolean isRoutingStrategyAllowedForUpsert(@Nonnull RoutingConfig routingConfig) {
-    String instanceSelectorType = routingConfig.getInstanceSelectorType();
-    return UPSERT_DEDUP_ALLOWED_ROUTING_STRATEGIES.stream().anyMatch(x -> x.equalsIgnoreCase(instanceSelectorType));
   }
 }

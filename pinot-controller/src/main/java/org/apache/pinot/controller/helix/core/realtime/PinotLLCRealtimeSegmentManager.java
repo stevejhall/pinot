@@ -181,8 +181,7 @@ public class PinotLLCRealtimeSegmentManager {
     _controllerConf = controllerConf;
     _controllerMetrics = controllerMetrics;
     _metadataEventNotifierFactory =
-        MetadataEventNotifierFactory.loadFactory(controllerConf.subset(METADATA_EVENT_NOTIFIER_PREFIX),
-            helixResourceManager);
+        MetadataEventNotifierFactory.loadFactory(controllerConf.subset(METADATA_EVENT_NOTIFIER_PREFIX));
     _numIdealStateUpdateLocks = controllerConf.getRealtimeSegmentMetadataCommitNumLocks();
     _idealStateUpdateLocks = new Lock[_numIdealStateUpdateLocks];
     for (int i = 0; i < _numIdealStateUpdateLocks; i++) {
@@ -1340,7 +1339,7 @@ public class PinotLLCRealtimeSegmentManager {
   private int getNumReplicas(TableConfig tableConfig, InstancePartitions instancePartitions) {
     if (instancePartitions.getNumReplicaGroups() == 1) {
       // Non-replica-group based
-      return tableConfig.getReplication();
+      return tableConfig.getValidationConfig().getReplicasPerPartitionNumber();
     } else {
       // Replica-group based
       return instancePartitions.getNumReplicaGroups();
@@ -1454,11 +1453,10 @@ public class PinotLLCRealtimeSegmentManager {
   /**
    * Force commit the current segments in consuming state and restart consumption
    */
-  public Set<String> forceCommit(String tableNameWithType) {
+  public void forceCommit(String tableNameWithType) {
     IdealState idealState = getIdealState(tableNameWithType);
     Set<String> consumingSegments = findConsumingSegments(idealState);
     sendForceCommitMessageToServers(tableNameWithType, consumingSegments);
-    return consumingSegments;
   }
 
   /**

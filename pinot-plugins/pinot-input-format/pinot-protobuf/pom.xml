@@ -25,7 +25,7 @@
   <parent>
     <artifactId>pinot-input-format</artifactId>
     <groupId>org.apache.pinot</groupId>
-    <version>0.13.0-SNAPSHOT</version>
+    <version>0.12.0-SNAPSHOT</version>
     <relativePath>..</relativePath>
   </parent>
 
@@ -36,6 +36,7 @@
   <properties>
     <pinot.root>${basedir}/../../..</pinot.root>
     <kafka.lib.version>2.8.1</kafka.lib.version>
+    <kafka.clients.version>2.8.1</kafka.clients.version>
     <testcontainers.version>1.17.3</testcontainers.version>
     <phase.prop>package</phase.prop>
   </properties>
@@ -69,7 +70,7 @@
     <dependency>
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
-      <version>${kafka.lib.version}</version>
+      <version>${kafka.clients.version}</version>
       <exclusions>
         <exclusion>
           <groupId>org.slf4j</groupId>
@@ -93,16 +94,11 @@
         </exclusion>
       </exclusions>
     </dependency>
-
     <dependency>
       <groupId>io.confluent</groupId>
       <artifactId>kafka-schema-registry-client</artifactId>
-      <version>${confluent.version}</version>
+      <version>6.1.8-nike</version>
       <exclusions>
-        <exclusion>
-          <groupId>org.apache.kafka</groupId>
-          <artifactId>kafka-clients</artifactId>
-        </exclusion>
         <exclusion>
           <groupId>org.slf4j</groupId>
           <artifactId>slf4j-api</artifactId>
@@ -119,6 +115,22 @@
           <groupId>io.swagger</groupId>
           <artifactId>swagger-annotations</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>io.swagger</groupId>
+          <artifactId>swagger-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.kafka</groupId>
+          <artifactId>kafka-clients</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>io.confluent</groupId>
+          <artifactId>common-utils</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>io.confluent</groupId>
+          <artifactId>kafka-schema-registry-client</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
@@ -126,6 +138,14 @@
       <artifactId>kafka-protobuf-serializer</artifactId>
       <version>${confluent.version}</version>
       <exclusions>
+        <exclusion>
+          <groupId>org.apache.kafka</groupId>
+          <artifactId>kafka-clients</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>io.confluent</groupId>
+          <artifactId>kafka-schema-registry-client</artifactId>
+        </exclusion>
         <exclusion>
           <groupId>org.jetbrains.kotlin</groupId>
           <artifactId>kotlin-stdlib-common</artifactId>
@@ -137,6 +157,10 @@
         <exclusion>
           <groupId>com.google.errorprone</groupId>
           <artifactId>error_prone_annotations</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>io.swagger</groupId>
+          <artifactId>swagger-annotations</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
@@ -160,7 +184,7 @@
         <artifactId>protobuf-maven-plugin</artifactId>
         <version>0.6.1</version>
         <configuration>
-          <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
+          <protocArtifact>com.google.protobuf:protoc:3.11.4:exe:${os.detected.classifier}</protocArtifact>
           <protoTestSourceRoot>${basedir}/src/test/resources</protoTestSourceRoot>
         </configuration>
         <executions>

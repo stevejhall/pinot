@@ -33,6 +33,7 @@ public class ModuloTransformFunction extends BaseTransformFunction {
   private TransformFunction _firstTransformFunction;
   private double _secondLiteral;
   private TransformFunction _secondTransformFunction;
+  private double[] _modulos;
 
   @Override
   public String getName() {
@@ -72,28 +73,33 @@ public class ModuloTransformFunction extends BaseTransformFunction {
     return DOUBLE_SV_NO_DICTIONARY_METADATA;
   }
 
+  @SuppressWarnings("Duplicates")
   @Override
   public double[] transformToDoubleValuesSV(ProjectionBlock projectionBlock) {
     int length = projectionBlock.getNumDocs();
-    if (_doubleValuesSV == null) {
-      _doubleValuesSV = new double[length];
+
+    if (_modulos == null || _modulos.length < length) {
+      _modulos = new double[length];
     }
+
     if (_firstTransformFunction == null) {
-      Arrays.fill(_doubleValuesSV, 0, length, _firstLiteral);
+      Arrays.fill(_modulos, 0, length, _firstLiteral);
     } else {
       double[] values = _firstTransformFunction.transformToDoubleValuesSV(projectionBlock);
-      System.arraycopy(values, 0, _doubleValuesSV, 0, length);
+      System.arraycopy(values, 0, _modulos, 0, length);
     }
+
     if (_secondTransformFunction == null) {
       for (int i = 0; i < length; i++) {
-        _doubleValuesSV[i] %= _secondLiteral;
+        _modulos[i] %= _secondLiteral;
       }
     } else {
       double[] values = _secondTransformFunction.transformToDoubleValuesSV(projectionBlock);
       for (int i = 0; i < length; i++) {
-        _doubleValuesSV[i] %= values[i];
+        _modulos[i] %= values[i];
       }
     }
-    return _doubleValuesSV;
+
+    return _modulos;
   }
 }

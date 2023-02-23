@@ -37,8 +37,8 @@ public class LoggerUtilsTest {
   public void testGetAllLoggers() {
     List<String> allLoggers = LoggerUtils.getAllLoggers();
     assertEquals(allLoggers.size(), 2);
-    assertTrue(allLoggers.contains(ROOT));
-    assertTrue(allLoggers.contains(PINOT));
+    assertEquals(allLoggers.get(0), ROOT);
+    assertEquals(allLoggers.get(1), PINOT);
   }
 
   @Test

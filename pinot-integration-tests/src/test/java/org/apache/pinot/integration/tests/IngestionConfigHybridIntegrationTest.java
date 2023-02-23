@@ -39,6 +39,7 @@ import org.testng.annotations.Test;
 
 import static org.testng.Assert.assertEquals;
 
+
 /**
  * Tests ingestion configs on a hybrid table
  */

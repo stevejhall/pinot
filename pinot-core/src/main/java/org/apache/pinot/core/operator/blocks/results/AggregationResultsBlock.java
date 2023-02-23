@@ -21,8 +21,6 @@ package org.apache.pinot.core.operator.blocks.results;
 import it.unimi.dsi.fastutil.doubles.DoubleArrayList;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import org.apache.pinot.common.datatable.DataTable;
 import org.apache.pinot.common.utils.DataSchema;
@@ -57,13 +55,11 @@ public class AggregationResultsBlock extends BaseResultsBlock {
   }
 
   @Override
-  public int getNumRows() {
-    return 1;
-  }
-
-  @Override
-  public DataSchema getDataSchema(QueryContext queryContext) {
+  public DataTable getDataTable(QueryContext queryContext)
+      throws Exception {
     boolean returnFinalResult = queryContext.isServerReturnFinalResult();
+
+    // Extract result column name and type from each aggregation function
     int numColumns = _aggregationFunctions.length;
     String[] columnNames = new String[numColumns];
     ColumnDataType[] columnDataTypes = new ColumnDataType[numColumns];
@@ -73,23 +69,10 @@ public class AggregationResultsBlock extends BaseResultsBlock {
       columnDataTypes[i] = returnFinalResult ? aggregationFunction.getFinalResultColumnType()
           : aggregationFunction.getIntermediateResultColumnType();
     }
-    return new DataSchema(columnNames, columnDataTypes);
-  }
 
-  @Override
-  public Collection<Object[]> getRows(QueryContext queryContext) {
-    return Collections.singletonList(_results.toArray());
-  }
-
-  @Override
-  public DataTable getDataTable(QueryContext queryContext)
-      throws IOException {
-    boolean returnFinalResult = queryContext.isServerReturnFinalResult();
-    DataSchema dataSchema = getDataSchema(queryContext);
-    assert dataSchema != null;
-    ColumnDataType[] columnDataTypes = dataSchema.getColumnDataTypes();
-    int numColumns = columnDataTypes.length;
-    DataTableBuilder dataTableBuilder = DataTableBuilderFactory.getDataTableBuilder(dataSchema);
+    // Build the data table.
+    DataTableBuilder dataTableBuilder =
+        DataTableBuilderFactory.getDataTableBuilder(new DataSchema(columnNames, columnDataTypes));
     if (queryContext.isNullHandlingEnabled()) {
       RoaringBitmap[] nullBitmaps = new RoaringBitmap[numColumns];
       for (int i = 0; i < numColumns; i++) {
@@ -125,7 +108,10 @@ public class AggregationResultsBlock extends BaseResultsBlock {
       }
       dataTableBuilder.finishRow();
     }
-    return dataTableBuilder.build();
+
+    DataTable dataTable = dataTableBuilder.build();
+    attachMetadataToDataTable(dataTable);
+    return dataTable;
   }
 
   private void setIntermediateResult(DataTableBuilder dataTableBuilder, ColumnDataType[] columnDataTypes, int index,

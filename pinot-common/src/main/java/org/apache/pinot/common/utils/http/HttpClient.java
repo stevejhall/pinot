@@ -78,8 +78,8 @@ public class HttpClient implements AutoCloseable {
   private static final Logger LOGGER = LoggerFactory.getLogger(HttpClient.class);
 
   public static final int DEFAULT_SOCKET_TIMEOUT_MS = 600 * 1000; // 10 minutes
-  public static final int GET_REQUEST_SOCKET_TIMEOUT_MS = 5 * 1000; // 5 seconds
-  public static final int DELETE_REQUEST_SOCKET_TIMEOUT_MS = 10 * 1000; // 10 seconds
+  public static final int GET_REQUEST_SOCKET_TIMEOUT_MS = 30 * 1000; // was 5 seconds changed to 30 seconds
+  public static final int DELETE_REQUEST_SOCKET_TIMEOUT_MS = 30 * 1000; // wasn 10 seconds changed to 30
   public static final String AUTH_HTTP_HEADER = "Authorization";
   public static final String JSON_CONTENT_TYPE = "application/json";
 
@@ -93,7 +93,10 @@ public class HttpClient implements AutoCloseable {
     SSLContext context = sslContext != null ? sslContext : TlsUtils.getSslContext();
     // Set NoopHostnameVerifier to skip validating hostname when uploading/downloading segments.
     SSLConnectionSocketFactory csf = new SSLConnectionSocketFactory(context, NoopHostnameVerifier.INSTANCE);
-    _httpClient = HttpClients.custom().setSSLSocketFactory(csf).build();
+    RequestConfig reqConfig = RequestConfig.custom().setConnectTimeout(30 * 1000)
+                    .setConnectionRequestTimeout(30 * 1000)
+                    .setSocketTimeout(30 * 1000).build();
+    _httpClient = HttpClients.custom().setSSLSocketFactory(csf).setDefaultRequestConfig(reqConfig).build();
   }
 
   public static HttpClient getInstance() {

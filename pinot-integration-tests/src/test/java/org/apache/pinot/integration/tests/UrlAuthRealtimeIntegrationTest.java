@@ -153,6 +153,11 @@ public class UrlAuthRealtimeIntegrationTest extends BaseClusterIntegrationTest {
   }
 
   @Override
+  protected boolean useLlc() {
+    return true;
+  }
+
+  @Override
   public void addSchema(Schema schema)
       throws IOException {
     SimpleHttpResponse response =

@@ -30,7 +30,6 @@ import io.swagger.annotations.SwaggerDefinition;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.concurrent.atomic.AtomicLong;
 import javax.inject.Inject;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -59,9 +58,6 @@ import static org.apache.pinot.spi.utils.CommonConstants.SWAGGER_AUTHORIZATION_K
 @Path("/")
 // TODO: Add APIs to return the RoutingTable (with unavailable segments)
 public class PinotBrokerDebug {
-
-  // Request ID is passed to the RoutingManager to rotate the selected replica-group.
-  private final AtomicLong _requestIdGenerator = new AtomicLong();
 
   @Inject
   private BrokerRoutingManager _routingManager;
@@ -106,7 +102,7 @@ public class PinotBrokerDebug {
     if (tableType != TableType.REALTIME) {
       String offlineTableName = TableNameBuilder.OFFLINE.tableNameWithType(tableName);
       RoutingTable routingTable = _routingManager.getRoutingTable(
-          CalciteSqlCompiler.compileToBrokerRequest("SELECT * FROM " + offlineTableName), getRequestId());
+          CalciteSqlCompiler.compileToBrokerRequest("SELECT * FROM " + offlineTableName));
       if (routingTable != null) {
         result.put(offlineTableName, routingTable.getServerInstanceToSegmentsMap());
       }
@@ -114,7 +110,7 @@ public class PinotBrokerDebug {
     if (tableType != TableType.OFFLINE) {
       String realtimeTableName = TableNameBuilder.REALTIME.tableNameWithType(tableName);
       RoutingTable routingTable = _routingManager.getRoutingTable(
-          CalciteSqlCompiler.compileToBrokerRequest("SELECT * FROM " + realtimeTableName), getRequestId());
+          CalciteSqlCompiler.compileToBrokerRequest("SELECT * FROM " + realtimeTableName));
       if (routingTable != null) {
         result.put(realtimeTableName, routingTable.getServerInstanceToSegmentsMap());
       }
@@ -137,8 +133,7 @@ public class PinotBrokerDebug {
   })
   public Map<ServerInstance, List<String>> getRoutingTableForQuery(
       @ApiParam(value = "SQL query (table name should have type suffix)") @QueryParam("query") String query) {
-    RoutingTable routingTable = _routingManager.getRoutingTable(CalciteSqlCompiler.compileToBrokerRequest(query),
-        getRequestId());
+    RoutingTable routingTable = _routingManager.getRoutingTable(CalciteSqlCompiler.compileToBrokerRequest(query));
     if (routingTable != null) {
       return routingTable.getServerInstanceToSegmentsMap();
     } else {
@@ -161,9 +156,5 @@ public class PinotBrokerDebug {
   })
   public String getServerRoutingStats() {
     return _serverRoutingStatsManager.getServerRoutingStatsStr();
-  }
-
-  private long getRequestId() {
-    return _requestIdGenerator.getAndIncrement();
   }
 }

@@ -50,8 +50,7 @@ public class DynamicBrokerSelectorTest {
   private static final String ZK_SERVER = "zkServers";
 
   @BeforeMethod
-  public void setUp()
-      throws Exception {
+  public void setUp() throws Exception {
     openMocks(this);
     Map<String, List<String>> tableToBrokerListMap = new HashMap<>();
     tableToBrokerListMap.put("table1", Collections.singletonList("broker1"));
@@ -89,27 +88,12 @@ public class DynamicBrokerSelectorTest {
   }
 
   @Test
-  public void testSelectBrokerWithTableName() {
+  public void testSelectBroker() {
     _dynamicBrokerSelectorUnderTest.handleDataChange("dataPath", "data");
 
-    String result = _dynamicBrokerSelectorUnderTest.selectBroker("table1");
+     String result = _dynamicBrokerSelectorUnderTest.selectBroker("table1");
 
     assertEquals("broker1", result);
-  }
-
-  @Test
-  public void testSelectBrokerWithDBAndTableName() {
-    _dynamicBrokerSelectorUnderTest.handleDataChange("dataPath", "data");
-    String result = _dynamicBrokerSelectorUnderTest.selectBroker("db1.table1");
-    assertEquals("broker1", result);
-
-    Map<String, List<String>> tableToBrokerListMap = new HashMap<>();
-    tableToBrokerListMap.put("table1", Collections.singletonList("broker1"));
-    tableToBrokerListMap.put("db1.table1", Collections.singletonList("broker2"));
-    when(_mockExternalViewReader.getTableToBrokersMap()).thenReturn(tableToBrokerListMap);
-    _dynamicBrokerSelectorUnderTest.handleDataChange("dataPath", "data");
-    result = _dynamicBrokerSelectorUnderTest.selectBroker("db1.table1");
-    assertEquals("broker2", result);
   }
 
   @Test

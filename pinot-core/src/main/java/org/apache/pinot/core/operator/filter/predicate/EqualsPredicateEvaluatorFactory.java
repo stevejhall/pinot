@@ -21,10 +21,6 @@ package org.apache.pinot.core.operator.filter.predicate;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import org.apache.pinot.common.request.context.predicate.EqPredicate;
-import org.apache.pinot.core.operator.filter.predicate.traits.DoubleValue;
-import org.apache.pinot.core.operator.filter.predicate.traits.FloatValue;
-import org.apache.pinot.core.operator.filter.predicate.traits.IntValue;
-import org.apache.pinot.core.operator.filter.predicate.traits.LongValue;
 import org.apache.pinot.segment.spi.index.reader.Dictionary;
 import org.apache.pinot.spi.data.FieldSpec.DataType;
 import org.apache.pinot.spi.utils.BooleanUtils;
@@ -86,8 +82,7 @@ public class EqualsPredicateEvaluatorFactory {
     }
   }
 
-  private static final class DictionaryBasedEqPredicateEvaluator extends BaseDictionaryBasedPredicateEvaluator
-      implements IntValue {
+  private static final class DictionaryBasedEqPredicateEvaluator extends BaseDictionaryBasedPredicateEvaluator {
     final int _matchingDictId;
     final int[] _matchingDictIds;
 
@@ -133,15 +128,9 @@ public class EqualsPredicateEvaluatorFactory {
     public int[] getMatchingDictIds() {
       return _matchingDictIds;
     }
-
-    @Override
-    public int getInt() {
-      return _matchingDictId;
-    }
   }
 
-  private static final class IntRawValueBasedEqPredicateEvaluator extends BaseRawValueBasedPredicateEvaluator
-      implements IntValue {
+  private static final class IntRawValueBasedEqPredicateEvaluator extends BaseRawValueBasedPredicateEvaluator {
     final int _matchingValue;
 
     IntRawValueBasedEqPredicateEvaluator(EqPredicate eqPredicate, int matchingValue) {
@@ -176,15 +165,9 @@ public class EqualsPredicateEvaluatorFactory {
       }
       return matches;
     }
-
-    @Override
-    public int getInt() {
-      return _matchingValue;
-    }
   }
 
-  private static final class LongRawValueBasedEqPredicateEvaluator extends BaseRawValueBasedPredicateEvaluator
-      implements LongValue {
+  private static final class LongRawValueBasedEqPredicateEvaluator extends BaseRawValueBasedPredicateEvaluator {
     final long _matchingValue;
 
     LongRawValueBasedEqPredicateEvaluator(EqPredicate eqPredicate, long matchingValue) {
@@ -219,15 +202,9 @@ public class EqualsPredicateEvaluatorFactory {
       }
       return matches;
     }
-
-    @Override
-    public long getLong() {
-      return _matchingValue;
-    }
   }
 
-  private static final class FloatRawValueBasedEqPredicateEvaluator extends BaseRawValueBasedPredicateEvaluator
-      implements FloatValue {
+  private static final class FloatRawValueBasedEqPredicateEvaluator extends BaseRawValueBasedPredicateEvaluator {
     final float _matchingValue;
 
     FloatRawValueBasedEqPredicateEvaluator(EqPredicate eqPredicate, float matchingValue) {
@@ -262,15 +239,9 @@ public class EqualsPredicateEvaluatorFactory {
       }
       return matches;
     }
-
-    @Override
-    public float getFloat() {
-      return _matchingValue;
-    }
   }
 
-  private static final class DoubleRawValueBasedEqPredicateEvaluator extends BaseRawValueBasedPredicateEvaluator
-      implements DoubleValue {
+  private static final class DoubleRawValueBasedEqPredicateEvaluator extends BaseRawValueBasedPredicateEvaluator {
     final double _matchingValue;
 
     DoubleRawValueBasedEqPredicateEvaluator(EqPredicate eqPredicate, double matchingValue) {
@@ -304,11 +275,6 @@ public class EqualsPredicateEvaluatorFactory {
         }
       }
       return matches;
-    }
-
-    @Override
-    public double getDouble() {
-      return _matchingValue;
     }
   }
 

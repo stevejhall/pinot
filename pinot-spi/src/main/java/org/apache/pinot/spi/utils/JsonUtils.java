@@ -47,7 +47,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
@@ -55,7 +54,6 @@ import java.util.stream.Stream;
 import javax.annotation.Nullable;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.pinot.spi.config.table.JsonIndexConfig;
 import org.apache.pinot.spi.config.table.ingestion.ComplexTypeConfig;
 import org.apache.pinot.spi.data.DateTimeFieldSpec;
 import org.apache.pinot.spi.data.DimensionFieldSpec;
@@ -72,9 +70,7 @@ public class JsonUtils {
   // For flattening
   public static final String VALUE_KEY = "";
   public static final String KEY_SEPARATOR = ".";
-  public static final String ARRAY_PATH = "[*]";
   public static final String ARRAY_INDEX_KEY = ".$index";
-  public static final int MAX_COMBINATIONS = 100_000;
 
   // For querying
   public static final String WILDCARD = "*";
@@ -350,21 +346,7 @@ public class JsonUtils {
    * ]
    * </pre>
    */
-  public static List<Map<String, String>> flatten(JsonNode node, JsonIndexConfig jsonIndexConfig) {
-    try {
-      return flatten(node, jsonIndexConfig, 0, "$", false);
-    } catch (OutOfMemoryError oom) {
-      throw new OutOfMemoryError(
-          String.format("Flattening JSON node: %s with config: %s requires too much memory, please adjust the config",
-              node, jsonIndexConfig));
-    } catch (Exception e) {
-      throw new IllegalArgumentException(
-          String.format("Caught exception while flattening JSON node: %s with config: %s", node, jsonIndexConfig), e);
-    }
-  }
-
-  private static List<Map<String, String>> flatten(JsonNode node, JsonIndexConfig jsonIndexConfig, int level,
-      String path, boolean includePathMatched) {
+  public static List<Map<String, String>> flatten(JsonNode node) {
     // Null
     if (node.isNull()) {
       return Collections.emptyList();
@@ -375,42 +357,23 @@ public class JsonUtils {
       return Collections.singletonList(Collections.singletonMap(VALUE_KEY, node.asText()));
     }
 
-    Preconditions.checkArgument(node.isArray() || node.isObject(), "Unexpected node type: %s", node.getNodeType());
-
-    // Do not flatten further for array and object when max level reached
-    int maxLevels = jsonIndexConfig.getMaxLevels();
-    if (maxLevels > 0 && level == maxLevels) {
-      return Collections.emptyList();
-    }
-
     // Array
     if (node.isArray()) {
-      if (jsonIndexConfig.isExcludeArray()) {
-        return Collections.emptyList();
-      }
+      List<Map<String, String>> results = new ArrayList<>();
       int numChildren = node.size();
-      if (numChildren == 0) {
-        return Collections.emptyList();
-      }
-      String childPath = path + ARRAY_PATH;
-      IncludeResult includeResult =
-          includePathMatched ? IncludeResult.MATCH : shouldInclude(jsonIndexConfig, childPath);
-      if (!includeResult._shouldInclude) {
-        return Collections.emptyList();
-      }
-      List<Map<String, String>> results = new ArrayList<>(numChildren);
       for (int i = 0; i < numChildren; i++) {
         JsonNode childNode = node.get(i);
         String arrayIndexValue = Integer.toString(i);
-        List<Map<String, String>> childResults =
-            flatten(childNode, jsonIndexConfig, level + 1, childPath, includeResult._includePathMatched);
+        List<Map<String, String>> childResults = flatten(childNode);
         for (Map<String, String> childResult : childResults) {
-          Map<String, String> result = new TreeMap<>();
-          for (Map.Entry<String, String> entry : childResult.entrySet()) {
-            result.put(KEY_SEPARATOR + entry.getKey(), entry.getValue());
+          if (!childResult.isEmpty()) {
+            Map<String, String> result = new TreeMap<>();
+            for (Map.Entry<String, String> entry : childResult.entrySet()) {
+              result.put(KEY_SEPARATOR + entry.getKey(), entry.getValue());
+            }
+            result.put(ARRAY_INDEX_KEY, arrayIndexValue);
+            results.add(result);
           }
-          result.put(ARRAY_INDEX_KEY, arrayIndexValue);
-          results.add(result);
         }
       }
       return results;
@@ -427,20 +390,8 @@ public class JsonUtils {
     Iterator<Map.Entry<String, JsonNode>> fieldIterator = node.fields();
     while (fieldIterator.hasNext()) {
       Map.Entry<String, JsonNode> fieldEntry = fieldIterator.next();
-      String field = fieldEntry.getKey();
-      Set<String> excludeFields = jsonIndexConfig.getExcludeFields();
-      if (excludeFields != null && excludeFields.contains(field)) {
-        continue;
-      }
-      String childPath = path + KEY_SEPARATOR + field;
-      IncludeResult includeResult =
-          includePathMatched ? IncludeResult.MATCH : shouldInclude(jsonIndexConfig, childPath);
-      if (!includeResult._shouldInclude) {
-        continue;
-      }
       JsonNode childNode = fieldEntry.getValue();
-      List<Map<String, String>> childResults =
-          flatten(childNode, jsonIndexConfig, level + 1, childPath, includeResult._includePathMatched);
+      List<Map<String, String>> childResults = flatten(childNode);
       int numChildResults = childResults.size();
 
       // Empty list - skip
@@ -449,7 +400,7 @@ public class JsonUtils {
       }
 
       // Single map - put all key-value pairs into the non-nested result map
-      String prefix = KEY_SEPARATOR + field;
+      String prefix = KEY_SEPARATOR + fieldEntry.getKey();
       if (numChildResults == 1) {
         Map<String, String> childResult = childResults.get(0);
         for (Map.Entry<String, String> entry : childResult.entrySet()) {
@@ -461,11 +412,21 @@ public class JsonUtils {
       // Multiple maps - put the results into a list to be processed later
       List<Map<String, String>> prefixedResults = new ArrayList<>(numChildResults);
       for (Map<String, String> childResult : childResults) {
-        Map<String, String> prefixedResult = new TreeMap<>();
-        for (Map.Entry<String, String> entry : childResult.entrySet()) {
-          prefixedResult.put(prefix + entry.getKey(), entry.getValue());
+        if (!childResult.isEmpty()) {
+          Map<String, String> prefixedResult = new TreeMap<>();
+          for (Map.Entry<String, String> entry : childResult.entrySet()) {
+            prefixedResult.put(prefix + entry.getKey(), entry.getValue());
+          }
+          prefixedResults.add(prefixedResult);
         }
-        prefixedResults.add(prefixedResult);
+      }
+      int numPrefixedResults = prefixedResults.size();
+      if (numPrefixedResults == 0) {
+        continue;
+      }
+      if (numPrefixedResults == 1) {
+        nonNestedResult.putAll(prefixedResults.get(0));
+        continue;
       }
       nestedResultsList.add(prefixedResults);
     }
@@ -486,64 +447,10 @@ public class JsonUtils {
       }
       return nestedResults;
     }
-    // Multiple child nodes with multiple records
-    if (jsonIndexConfig.isDisableCrossArrayUnnest()) {
-      // Add each array individually
-      int numResults = 0;
-      for (List<Map<String, String>> nestedResults : nestedResultsList) {
-        numResults += nestedResults.size();
-      }
-      List<Map<String, String>> results = new ArrayList<>(numResults);
-      for (List<Map<String, String>> nestedResults : nestedResultsList) {
-        for (Map<String, String> nestedResult : nestedResults) {
-          nestedResult.putAll(nonNestedResult);
-          results.add(nestedResult);
-        }
-      }
-      return results;
-    } else {
-      // Calculate each combination of them as a new record
-      long numResults = 1;
-      for (List<Map<String, String>> nestedResults : nestedResultsList) {
-        numResults *= nestedResults.size();
-        Preconditions.checkState(numResults < MAX_COMBINATIONS, "Got too many combinations");
-      }
-      List<Map<String, String>> results = new ArrayList<>((int) numResults);
-      unnestResults(nestedResultsList.get(0), nestedResultsList, 1, nonNestedResult, results);
-      return results;
-    }
-  }
-
-  private static IncludeResult shouldInclude(JsonIndexConfig jsonIndexConfig, String path) {
-    Set<String> includePaths = jsonIndexConfig.getIncludePaths();
-    if (includePaths != null) {
-      if (includePaths.contains(path)) {
-        return IncludeResult.MATCH;
-      }
-      for (String includePath : includePaths) {
-        if (includePath.startsWith(path)) {
-          return IncludeResult.POTENTIAL_MATCH;
-        }
-      }
-      return IncludeResult.NOT_MATCH;
-    }
-    Set<String> excludePaths = jsonIndexConfig.getExcludePaths();
-    if (excludePaths != null && excludePaths.contains(path)) {
-      return IncludeResult.NOT_MATCH;
-    }
-    return IncludeResult.POTENTIAL_MATCH;
-  }
-
-  private enum IncludeResult {
-    MATCH(true, true), POTENTIAL_MATCH(true, false), NOT_MATCH(false, false);
-
-    final boolean _shouldInclude;
-    final boolean _includePathMatched;
-
-    IncludeResult(boolean shouldInclude, boolean includePathMatched) {
-      _shouldInclude = shouldInclude;
-      _includePathMatched = includePathMatched;
-    }
+    // If there are multiple child nodes with multiple records, calculate each combination of them as a new record.
+    List<Map<String, String>> results = new ArrayList<>();
+    unnestResults(nestedResultsList.get(0), nestedResultsList, 1, nonNestedResult, results);
+    return results;
   }
 
   private static void unnestResults(List<Map<String, String>> currentResults,

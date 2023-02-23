@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import javax.annotation.Nullable;
 import org.apache.commons.lang3.StringUtils;
 
 
@@ -39,8 +38,6 @@ public class StarTreeQueryGenerator {
   private static final String SELECT = "SELECT ";
   private static final String FROM = " FROM ";
   private static final String WHERE = " WHERE ";
-  private static final String GROUP_BY = " GROUP BY ";
-  private static final String ORDER_BY = " ORDER BY ";
   private static final String BETWEEN = " BETWEEN ";
   private static final String IN = " IN ";
   private static final String NOT_IN = " NOT IN ";
@@ -212,11 +209,10 @@ public class StarTreeQueryGenerator {
   }
 
   /**
-   * Randomly generate the WHERE clause of the query, may return {@code null}.
+   * Randomly generate the WHERE clause of the query, may return empty string.
    *
    * @return all predicates.
    */
-  @Nullable
   private String generatePredicates() {
     int numPredicates = RANDOM.nextInt(MAX_NUM_PREDICATES + 1);
     if (numPredicates == 0) {
@@ -248,9 +244,9 @@ public class StarTreeQueryGenerator {
   }
 
   /**
-   * Randomly generate the group-by columns, may return {@code null}.
+   * Randomly generate the GROUP BY and ORDER BY section with the same columns, may return empty string.
    */
-  private String generateGroupByColumns() {
+  private String generateGroupBysAndOrderBys() {
     int numColumns = RANDOM.nextInt(MAX_NUM_GROUP_BYS + 1);
     if (numColumns == 0) {
       return null;
@@ -258,7 +254,8 @@ public class StarTreeQueryGenerator {
 
     List<String> dimensions = new ArrayList<>(_singleValueDimensionColumns);
     Collections.shuffle(dimensions);
-    return StringUtils.join(dimensions.subList(0, numColumns), ", ");
+    String columns = StringUtils.join(dimensions.subList(0, numColumns), ", ");
+    return String.format(" GROUP BY %s ORDER BY %s", columns, columns);
   }
 
   /**
@@ -266,21 +263,17 @@ public class StarTreeQueryGenerator {
    *
    * @param aggregations aggregation section.
    * @param predicates predicate section.
-   * @param groupByColumns group-by columns.
+   * @param groupBysAndOrderBys group by and order by section.
    * @return overall query.
    */
-  private String buildQuery(String aggregations, String predicates, String groupByColumns) {
-    StringBuilder stringBuilder = new StringBuilder(SELECT);
-    if (groupByColumns != null) {
-      stringBuilder.append(groupByColumns).append(", ");
-    }
-    stringBuilder.append(aggregations);
+  private String buildQuery(String aggregations, String predicates, String groupBysAndOrderBys) {
+    StringBuilder stringBuilder = new StringBuilder(SELECT).append(aggregations);
     stringBuilder.append(FROM).append(_tableName);
     if (predicates != null) {
       stringBuilder.append(predicates);
     }
-    if (groupByColumns != null) {
-      stringBuilder.append(GROUP_BY).append(groupByColumns).append(ORDER_BY).append(groupByColumns);
+    if (groupBysAndOrderBys != null) {
+      stringBuilder.append(groupBysAndOrderBys);
     }
     return stringBuilder.toString();
   }
@@ -291,6 +284,6 @@ public class StarTreeQueryGenerator {
    * @return Return the generated query.
    */
   public String nextQuery() {
-    return buildQuery(generateAggregations(), generatePredicates(), generateGroupByColumns());
+    return buildQuery(generateAggregations(), generatePredicates(), generateGroupBysAndOrderBys());
   }
 }

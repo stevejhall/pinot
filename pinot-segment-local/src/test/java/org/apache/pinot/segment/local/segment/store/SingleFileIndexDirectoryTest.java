@@ -82,7 +82,6 @@ public class SingleFileIndexDirectoryTest {
   void writeMetadata() {
     SegmentMetadataImpl meta = Mockito.mock(SegmentMetadataImpl.class);
     Mockito.when(meta.getVersion()).thenReturn(SegmentVersion.v3);
-    Mockito.when(meta.getStarTreeV2MetadataList()).thenReturn(null);
     _segmentMetadata = meta;
   }
 
@@ -234,10 +233,8 @@ public class SingleFileIndexDirectoryTest {
   public void testRemoveTextIndices()
       throws IOException, ConfigurationException {
     try (SingleFileIndexDirectory sfd = new SingleFileIndexDirectory(TEMP_DIR, _segmentMetadata, ReadMode.mmap);
-        LuceneTextIndexCreator fooCreator = new LuceneTextIndexCreator("foo", TEMP_DIR, true,
-            null, null);
-        LuceneTextIndexCreator barCreator = new LuceneTextIndexCreator("bar", TEMP_DIR, true,
-            null, null)) {
+        LuceneTextIndexCreator fooCreator = new LuceneTextIndexCreator("foo", TEMP_DIR, true);
+        LuceneTextIndexCreator barCreator = new LuceneTextIndexCreator("bar", TEMP_DIR, true)) {
       PinotDataBuffer buf = sfd.newBuffer("col1", ColumnIndexType.FORWARD_INDEX, 1024);
       buf.putInt(0, 1);
 
@@ -339,10 +336,8 @@ public class SingleFileIndexDirectoryTest {
   public void testGetColumnIndices()
       throws Exception {
     try (SingleFileIndexDirectory sfd = new SingleFileIndexDirectory(TEMP_DIR, _segmentMetadata, ReadMode.mmap);
-        LuceneTextIndexCreator fooCreator = new LuceneTextIndexCreator("foo", TEMP_DIR, true,
-            null, null);
-        LuceneTextIndexCreator barCreator = new LuceneTextIndexCreator("bar", TEMP_DIR, true,
-            null, null)) {
+        LuceneTextIndexCreator fooCreator = new LuceneTextIndexCreator("foo", TEMP_DIR, true);
+        LuceneTextIndexCreator barCreator = new LuceneTextIndexCreator("bar", TEMP_DIR, true)) {
       PinotDataBuffer buf = sfd.newBuffer("col1", ColumnIndexType.FORWARD_INDEX, 1024);
       buf.putInt(0, 111);
       buf = sfd.newBuffer("col2", ColumnIndexType.DICTIONARY, 1024);

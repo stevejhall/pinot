@@ -34,7 +34,6 @@ import org.apache.datasketches.theta.Sketch;
 import org.apache.datasketches.theta.Union;
 import org.apache.datasketches.theta.UpdateSketch;
 import org.apache.datasketches.theta.UpdateSketchBuilder;
-import org.apache.pinot.common.request.Expression;
 import org.apache.pinot.common.request.context.ExpressionContext;
 import org.apache.pinot.common.request.context.FilterContext;
 import org.apache.pinot.common.request.context.FunctionContext;
@@ -101,7 +100,7 @@ public class DistinctCountThetaSketchAggregationFunction
       ExpressionContext paramsExpression = arguments.get(1);
       Preconditions.checkArgument(paramsExpression.getType() == ExpressionContext.Type.LITERAL,
           "Second argument of DISTINCT_COUNT_THETA_SKETCH aggregation function must be literal (parameters)");
-      Parameters parameters = new Parameters(paramsExpression.getLiteralString());
+      Parameters parameters = new Parameters(paramsExpression.getLiteral());
       int nominalEntries = parameters.getNominalEntries();
       _updateSketchBuilder.setNominalEntries(nominalEntries);
       _setOperationBuilder.setNominalEntries(nominalEntries);
@@ -131,7 +130,7 @@ public class DistinctCountThetaSketchAggregationFunction
             "Third to second last argument of DISTINCT_COUNT_THETA_SKETCH aggregation function must be literal "
                 + "(filter expression)");
         FilterContext filter =
-            RequestContextUtils.getFilter(CalciteSqlParser.compileToExpression(filterExpression.getLiteralString()));
+            RequestContextUtils.getFilter(CalciteSqlParser.compileToExpression(filterExpression.getLiteral()));
         // NOTE: Collect expressions before constructing the FilterInfo so that expressionIndexMap always include the
         //       expressions in the filter.
         collectExpressions(filter, _inputExpressions, expressionIndexMap);
@@ -143,9 +142,8 @@ public class DistinctCountThetaSketchAggregationFunction
       Preconditions.checkArgument(postAggregationExpression.getType() == ExpressionContext.Type.LITERAL,
           "Last argument of DISTINCT_COUNT_THETA_SKETCH aggregation function must be literal (post-aggregation "
               + "expression)");
-      Expression expr = CalciteSqlParser.compileToExpression(postAggregationExpression.getLiteralString());
-      _postAggregationExpression = RequestContextUtils.getExpression(expr);
-
+      _postAggregationExpression = RequestContextUtils.getExpression(
+          CalciteSqlParser.compileToExpression(postAggregationExpression.getLiteral()));
 
       // Validate the post-aggregation expression
       _includeDefaultSketch = validatePostAggregationExpression(_postAggregationExpression, _filterEvaluators.size());
@@ -406,7 +404,7 @@ public class DistinctCountThetaSketchAggregationFunction
       if (_includeDefaultSketch) {
         Union defaultUnion = unions.get(0);
         for (Sketch sketch : sketches) {
-          defaultUnion.union(sketch);
+          defaultUnion.update(sketch);
         }
       }
       for (int i = 0; i < numFilters; i++) {
@@ -414,7 +412,7 @@ public class DistinctCountThetaSketchAggregationFunction
         Union union = unions.get(i + 1);
         for (int j = 0; j < length; j++) {
           if (filterEvaluator.evaluate(singleValues, valueTypes, valueArrays, j)) {
-            union.union(sketches[j]);
+            union.update(sketches[j]);
           }
         }
       }
@@ -634,11 +632,11 @@ public class DistinctCountThetaSketchAggregationFunction
         List<Union> unions = getUnions(groupByResultHolder, groupKeyArray[i]);
         Sketch sketch = sketches[i];
         if (_includeDefaultSketch) {
-          unions.get(0).union(sketch);
+          unions.get(0).update(sketch);
         }
         for (int j = 0; j < numFilters; j++) {
           if (_filterEvaluators.get(j).evaluate(singleValues, valueTypes, valueArrays, i)) {
-            unions.get(j + 1).union(sketch);
+            unions.get(j + 1).update(sketch);
           }
         }
       }
@@ -907,7 +905,7 @@ public class DistinctCountThetaSketchAggregationFunction
       if (_includeDefaultSketch) {
         for (int i = 0; i < length; i++) {
           for (int groupKey : groupKeysArray[i]) {
-            getUnions(groupByResultHolder, groupKey).get(0).union(sketches[i]);
+            getUnions(groupByResultHolder, groupKey).get(0).update(sketches[i]);
           }
         }
       }
@@ -916,7 +914,7 @@ public class DistinctCountThetaSketchAggregationFunction
         for (int j = 0; j < length; j++) {
           if (filterEvaluator.evaluate(singleValues, valueTypes, valueArrays, j)) {
             for (int groupKey : groupKeysArray[i]) {
-              getUnions(groupByResultHolder, groupKey).get(i + 1).union(sketches[i]);
+              getUnions(groupByResultHolder, groupKey).get(i + 1).update(sketches[i]);
             }
           }
         }
@@ -969,8 +967,8 @@ public class DistinctCountThetaSketchAggregationFunction
         continue;
       }
       Union union = _setOperationBuilder.buildUnion();
-      union.union(sketch1);
-      union.union(sketch2);
+      union.update(sketch1);
+      union.update(sketch2);
       // NOTE: Compact the sketch in unsorted, on-heap fashion for performance concern.
       //       See https://datasketches.apache.org/docs/Theta/ThetaSize.html for more details.
       mergedSketches.add(union.getResult(false, null));
@@ -1053,7 +1051,8 @@ public class DistinctCountThetaSketchAggregationFunction
    */
   private static boolean validatePostAggregationExpression(ExpressionContext expression, int numFilters) {
     Preconditions.checkArgument(expression.getType() != ExpressionContext.Type.LITERAL,
-        "Post-aggregation expression should not contain literal expression: %s", expression.toString());
+        "Post-aggregation expression should not contain literal expression: %s", expression.getLiteral());
+
     if (expression.getType() == ExpressionContext.Type.IDENTIFIER) {
       int sketchId = extractSketchId(expression.getIdentifier());
       Preconditions.checkArgument(sketchId <= numFilters, "Sketch id: %s exceeds number of filters: %s", sketchId,
@@ -1278,20 +1277,20 @@ public class DistinctCountThetaSketchAggregationFunction
       case SET_UNION:
         Union union = _setOperationBuilder.buildUnion();
         for (ExpressionContext argument : arguments) {
-          union.union(evaluatePostAggregationExpression(argument, sketches));
+          union.update(evaluatePostAggregationExpression(argument, sketches));
         }
         return union.getResult(false, null);
       case SET_INTERSECT:
         Intersection intersection = _setOperationBuilder.buildIntersection();
         for (ExpressionContext argument : arguments) {
-          intersection.intersect(evaluatePostAggregationExpression(argument, sketches));
+          intersection.update(evaluatePostAggregationExpression(argument, sketches));
         }
         return intersection.getResult(false, null);
       case SET_DIFF:
         AnotB diff = _setOperationBuilder.buildANotB();
-        diff.setA(evaluatePostAggregationExpression(arguments.get(0), sketches));
-        diff.notB(evaluatePostAggregationExpression(arguments.get(1), sketches));
-        return diff.getResult(false, null, false);
+        diff.update(evaluatePostAggregationExpression(arguments.get(0), sketches),
+            evaluatePostAggregationExpression(arguments.get(1), sketches));
+        return diff.getResult(false, null);
       default:
         throw new IllegalStateException();
     }

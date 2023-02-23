@@ -37,9 +37,4 @@ public interface KeySelector<IN, OUT> {
   OUT getKey(IN input);
 
   int computeHash(IN input);
-
-  /**
-   * @return the hash-algorithm used for distributing rows
-   */
-  String hashAlgorithm();
 }

@@ -18,12 +18,9 @@
  */
 package org.apache.pinot.segment.local.upsert;
 
-import java.io.Closeable;
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import org.apache.pinot.segment.local.segment.readers.PinotSegmentColumnReader;
+import org.apache.pinot.segment.spi.ImmutableSegment;
 import org.apache.pinot.segment.spi.IndexSegment;
 import org.apache.pinot.spi.data.readers.PrimaryKey;
 import org.apache.pinot.spi.utils.ByteArray;
@@ -39,18 +36,20 @@ public class UpsertUtils {
   /**
    * Returns an iterator of {@link RecordInfo} for all the documents from the segment.
    */
-  public static Iterator<RecordInfo> getRecordInfoIterator(RecordInfoReader recordInfoReader, int numDocs) {
+  public static Iterator<RecordInfo> getRecordInfoIterator(ImmutableSegment segment, List<String> primaryKeyColumns,
+      String comparisonColumn) {
+    int numTotalDocs = segment.getSegmentMetadata().getTotalDocs();
     return new Iterator<RecordInfo>() {
       private int _docId = 0;
 
       @Override
       public boolean hasNext() {
-        return _docId < numDocs;
+        return _docId < numTotalDocs;
       }
 
       @Override
       public RecordInfo next() {
-        return recordInfoReader.getRecordInfo(_docId++);
+        return getRecordInfo(segment, primaryKeyColumns, comparisonColumn, _docId++);
       }
     };
   }
@@ -58,8 +57,8 @@ public class UpsertUtils {
   /**
    * Returns an iterator of {@link RecordInfo} for the valid documents from the segment.
    */
-  public static Iterator<RecordInfo> getRecordInfoIterator(RecordInfoReader recordInfoReader,
-      MutableRoaringBitmap validDocIds) {
+  public static Iterator<RecordInfo> getRecordInfoIterator(ImmutableSegment segment, List<String> primaryKeyColumns,
+      String comparisonColumn, MutableRoaringBitmap validDocIds) {
     return new Iterator<RecordInfo>() {
       private final PeekableIntIterator _docIdIterator = validDocIds.getIntIterator();
 
@@ -70,72 +69,37 @@ public class UpsertUtils {
 
       @Override
       public RecordInfo next() {
-        return recordInfoReader.getRecordInfo(_docIdIterator.next());
+        return getRecordInfo(segment, primaryKeyColumns, comparisonColumn, _docIdIterator.next());
       }
     };
   }
 
-  public static class RecordInfoReader implements Closeable {
-    public final PrimaryKeyReader _primaryKeyReader;
-    public final PinotSegmentColumnReader _comparisonColumnReader;
-
-    public RecordInfoReader(IndexSegment segment, List<String> primaryKeyColumns, String comparisonColumn) {
-      _primaryKeyReader = new PrimaryKeyReader(segment, primaryKeyColumns);
-      _comparisonColumnReader = new PinotSegmentColumnReader(segment, comparisonColumn);
+  /**
+   * Reads a {@link RecordInfo} from the segment.
+   */
+  public static RecordInfo getRecordInfo(ImmutableSegment segment, List<String> primaryKeyColumns,
+      String comparisonColumn, int docId) {
+    PrimaryKey primaryKey = new PrimaryKey(new Object[primaryKeyColumns.size()]);
+    getPrimaryKey(segment, primaryKeyColumns, docId, primaryKey);
+    Object comparisonValue = segment.getValue(docId, comparisonColumn);
+    if (comparisonValue instanceof byte[]) {
+      comparisonValue = new ByteArray((byte[]) comparisonValue);
     }
-
-    public RecordInfo getRecordInfo(int docId) {
-      PrimaryKey primaryKey = _primaryKeyReader.getPrimaryKey(docId);
-      Comparable comparisonValue = (Comparable) getValue(_comparisonColumnReader, docId);
-      return new RecordInfo(primaryKey, docId, comparisonValue);
-    }
-
-    @Override
-    public void close()
-        throws IOException {
-      _primaryKeyReader.close();
-      _comparisonColumnReader.close();
-    }
+    return new RecordInfo(primaryKey, docId, (Comparable) comparisonValue);
   }
 
-  public static class PrimaryKeyReader implements Closeable {
-    public final List<PinotSegmentColumnReader> _primaryKeyColumnReaders;
-
-    public PrimaryKeyReader(IndexSegment segment, List<String> primaryKeyColumns) {
-      _primaryKeyColumnReaders = new ArrayList<>(primaryKeyColumns.size());
-      for (String primaryKeyColumn : primaryKeyColumns) {
-        _primaryKeyColumnReaders.add(new PinotSegmentColumnReader(segment, primaryKeyColumn));
+  /**
+   * Reads a primary key from the segment.
+   */
+  public static void getPrimaryKey(IndexSegment segment, List<String> primaryKeyColumns, int docId, PrimaryKey buffer) {
+    Object[] values = buffer.getValues();
+    int numPrimaryKeyColumns = values.length;
+    for (int i = 0; i < numPrimaryKeyColumns; i++) {
+      Object value = segment.getValue(docId, primaryKeyColumns.get(i));
+      if (value instanceof byte[]) {
+        value = new ByteArray((byte[]) value);
       }
+      values[i] = value;
     }
-
-    public PrimaryKey getPrimaryKey(int docId) {
-      int numPrimaryKeys = _primaryKeyColumnReaders.size();
-      Object[] values = new Object[numPrimaryKeys];
-      for (int i = 0; i < numPrimaryKeys; i++) {
-        values[i] = getValue(_primaryKeyColumnReaders.get(i), docId);
-      }
-      return new PrimaryKey(values);
-    }
-
-    public void getPrimaryKey(int docId, PrimaryKey buffer) {
-      Object[] values = buffer.getValues();
-      int numPrimaryKeys = values.length;
-      for (int i = 0; i < numPrimaryKeys; i++) {
-        values[i] = getValue(_primaryKeyColumnReaders.get(i), docId);
-      }
-    }
-
-    @Override
-    public void close()
-        throws IOException {
-      for (PinotSegmentColumnReader primaryKeyColumnReader : _primaryKeyColumnReaders) {
-        primaryKeyColumnReader.close();
-      }
-    }
-  }
-
-  private static Object getValue(PinotSegmentColumnReader columnReader, int docId) {
-    Object value = columnReader.getValue(docId);
-    return value instanceof byte[] ? new ByteArray((byte[]) value) : value;
   }
 }

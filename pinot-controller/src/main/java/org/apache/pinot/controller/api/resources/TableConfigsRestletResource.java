@@ -141,7 +141,7 @@ public class TableConfigsRestletResource {
       @ApiParam(value = "Raw table name", required = true) @PathParam("tableName") String tableName) {
 
     try {
-      Schema schema = _pinotHelixResourceManager.getTableSchema(tableName);
+      Schema schema = _pinotHelixResourceManager.getSchema(tableName);
       TableConfig offlineTableConfig = _pinotHelixResourceManager.getOfflineTableConfig(tableName);
       TableConfig realtimeTableConfig = _pinotHelixResourceManager.getRealtimeTableConfig(tableName);
       TableConfigs config = new TableConfigs(tableName, schema, offlineTableConfig, realtimeTableConfig);
@@ -180,11 +180,22 @@ public class TableConfigsRestletResource {
     }
 
     String rawTableName = tableConfigs.getTableName();
-    if (_pinotHelixResourceManager.hasOfflineTable(rawTableName) || _pinotHelixResourceManager
-        .hasRealtimeTable(rawTableName) || _pinotHelixResourceManager.getSchema(rawTableName) != null) {
+    boolean hasOfflineTable = _pinotHelixResourceManager.hasOfflineTable(rawTableName);
+    boolean hasRealtimeTable = _pinotHelixResourceManager.hasRealtimeTable(rawTableName);
+    Schema tableSchema = _pinotHelixResourceManager.getSchema(rawTableName);
+    if (hasOfflineTable) {
       throw new ControllerApplicationException(LOGGER,
-          String.format("TableConfigs: %s already exists. Use PUT to update existing config", rawTableName),
+          String.format("OffLine table: %s already exists. Use PUT to update existing config", rawTableName),
           Response.Status.BAD_REQUEST);
+    } else if (hasRealtimeTable) {
+      throw new ControllerApplicationException(LOGGER,
+                      String.format("Realtime table: %s already exists. Use PUT to update existing config", rawTableName),
+                      Response.Status.BAD_REQUEST);
+    } else if (tableSchema != null && tableSchema.size() > 0) {
+      LOGGER.info(String.format("Schema for table: %s already exists.  Found schema: %s", rawTableName, tableSchema.toString()));
+      throw new ControllerApplicationException(LOGGER,
+                      String.format("Schema for table: %s already exists. Use PUT to update existing config", rawTableName),
+                      Response.Status.BAD_REQUEST);
     }
 
     // validate permission
@@ -212,7 +223,8 @@ public class TableConfigsRestletResource {
       }
 
       try {
-        _pinotHelixResourceManager.addSchema(schema, false, false);
+        // schema is not null and is an empty string per earlier check.  force schema update
+        _pinotHelixResourceManager.addSchema(schema, true, true);
         LOGGER.info("Added schema: {}", schema.getSchemaName());
         if (offlineTableConfig != null) {
           _pinotHelixResourceManager.addTable(offlineTableConfig);

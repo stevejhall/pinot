@@ -40,13 +40,10 @@ import org.apache.pinot.spi.data.FieldSpec;
 import org.apache.pinot.spi.data.Schema;
 import org.apache.pinot.spi.ingestion.batch.BatchConfigProperties;
 import org.apache.pinot.spi.utils.builder.TableConfigBuilder;
+import org.testng.Assert;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
-
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertFalse;
-import static org.testng.Assert.assertTrue;
 
 
 /**
@@ -90,11 +87,7 @@ public class PinotIngestionRestletResourceStatelessTest extends ControllerTest {
       throws Exception {
 
     List<String> segments = _helixResourceManager.getSegmentsFor(TABLE_NAME_WITH_TYPE, false);
-    assertEquals(segments.size(), 0);
-
-    // the ingestion dir does not exist before ingesting files
-    File ingestionDir = new File(_controllerConfig.getLocalTempDir() + "/ingestion_dir");
-    assertFalse(ingestionDir.exists());
+    Assert.assertEquals(segments.size(), 0);
 
     // ingest from file
     Map<String, String> batchConfigMap = new HashMap<>();
@@ -102,17 +95,13 @@ public class PinotIngestionRestletResourceStatelessTest extends ControllerTest {
     batchConfigMap.put(String.format("%s.delimiter", BatchConfigProperties.RECORD_READER_PROP_PREFIX), "|");
     sendHttpPost(_controllerRequestURLBuilder.forIngestFromFile(TABLE_NAME_WITH_TYPE, batchConfigMap));
     segments = _helixResourceManager.getSegmentsFor(TABLE_NAME_WITH_TYPE, false);
-    assertEquals(segments.size(), 1);
+    Assert.assertEquals(segments.size(), 1);
 
     // ingest from URI
     sendHttpPost(_controllerRequestURLBuilder.forIngestFromURI(TABLE_NAME_WITH_TYPE, batchConfigMap,
         String.format("file://%s", _inputFile.getAbsolutePath())));
     segments = _helixResourceManager.getSegmentsFor(TABLE_NAME_WITH_TYPE, false);
-    assertEquals(segments.size(), 2);
-
-    // the ingestion dir exists after ingesting files. We check the existence to make sure this dir is created under
-    // _controllerConfig.getLocalTempDir()
-    assertTrue(ingestionDir.exists());
+    Assert.assertEquals(segments.size(), 2);
   }
 
   private void sendHttpPost(String uri)
@@ -124,7 +113,7 @@ public class PinotIngestionRestletResourceStatelessTest extends ControllerTest {
     httpPost.setEntity(reqEntity);
     HttpResponse response = httpClient.execute(httpPost);
     int statusCode = response.getStatusLine().getStatusCode();
-    assertEquals(statusCode, 200);
+    Assert.assertEquals(statusCode, 200);
   }
 
   @AfterClass

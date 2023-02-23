@@ -25,8 +25,6 @@ import org.apache.pinot.segment.local.io.writer.impl.DirectMemoryManager;
 import org.apache.pinot.segment.local.io.writer.impl.MmapMemoryManager;
 import org.apache.pinot.segment.spi.MutableSegment;
 import org.apache.pinot.segment.spi.memory.PinotDataBufferMemoryManager;
-import org.apache.pinot.spi.stream.ConsumerPartitionState;
-import org.apache.pinot.spi.stream.PartitionLagState;
 import org.apache.pinot.spi.utils.CommonConstants.ConsumerState;
 
 
@@ -56,17 +54,5 @@ public abstract class RealtimeSegmentDataManager extends SegmentDataManager {
    */
   public abstract ConsumerState getConsumerState();
 
-  /**
-   * @return Timestamp at which the last record was indexed
-   */
   public abstract long getLastConsumedTimestamp();
-
-  /**
-   * @return Per-partition consumer's status, which typically includes last consumed message timestamp,
-   * latest available upstream offset etc
-   */
-  public abstract Map<String, ConsumerPartitionState> getConsumerPartitionState();
-
-  public abstract Map<String, PartitionLagState> getPartitionToLagState(
-      Map<String, ConsumerPartitionState> consumerPartitionStateMap);
 }

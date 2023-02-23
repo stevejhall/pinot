@@ -53,11 +53,10 @@ import org.apache.http.HttpVersion;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.RequestBuilder;
 import org.apache.pinot.common.utils.FileUploadDownloadClient;
+import org.apache.pinot.common.utils.LoggerFileServer;
 import org.apache.pinot.common.utils.LoggerUtils;
 import org.apache.pinot.common.utils.SimpleHttpResponse;
 import org.apache.pinot.common.utils.config.InstanceUtils;
-import org.apache.pinot.common.utils.log.DummyLogFileServer;
-import org.apache.pinot.common.utils.log.LogFileServer;
 import org.apache.pinot.controller.api.access.AccessType;
 import org.apache.pinot.controller.api.access.Authenticate;
 import org.apache.pinot.controller.helix.core.PinotHelixResourceManager;
@@ -77,7 +76,7 @@ public class PinotControllerLogger {
   private final FileUploadDownloadClient _fileUploadDownloadClient = new FileUploadDownloadClient();
 
   @Inject
-  private LogFileServer _logFileServer;
+  private LoggerFileServer _loggerFileServer;
 
   @Inject
   PinotHelixResourceManager _pinotHelixResourceManager;
@@ -118,10 +117,10 @@ public class PinotControllerLogger {
   @ApiOperation(value = "Get all local log files")
   public Set<String> getLocalLogFiles() {
     try {
-      if (_logFileServer == null || _logFileServer instanceof DummyLogFileServer) {
+      if (_loggerFileServer == null) {
         throw new WebApplicationException("Root log directory doesn't exist", Response.Status.INTERNAL_SERVER_ERROR);
       }
-      return _logFileServer.getAllLogFilePaths();
+      return _loggerFileServer.getAllPaths();
     } catch (IOException e) {
       throw new WebApplicationException(e, Response.Status.INTERNAL_SERVER_ERROR);
     }
@@ -134,11 +133,11 @@ public class PinotControllerLogger {
   @ApiOperation(value = "Download a log file")
   public Response downloadLogFile(
       @ApiParam(value = "Log file path", required = true) @QueryParam("filePath") String filePath) {
-    if (_logFileServer == null || _logFileServer instanceof DummyLogFileServer) {
+    if (_loggerFileServer == null) {
       throw new WebApplicationException("Root log directory is not configured",
           Response.Status.INTERNAL_SERVER_ERROR);
     }
-    return _logFileServer.downloadLogFile(filePath);
+    return _loggerFileServer.downloadLogFile(filePath);
   }
 
   @GET
@@ -146,7 +145,7 @@ public class PinotControllerLogger {
   @Produces(MediaType.APPLICATION_JSON)
   @ApiOperation(value = "Collect log files from all the instances")
   public Map<String, Set<String>> getLogFilesFromAllInstances() {
-    if (_logFileServer == null || _logFileServer instanceof DummyLogFileServer) {
+    if (_loggerFileServer == null) {
       throw new WebApplicationException("Root directory doesn't exist", Response.Status.INTERNAL_SERVER_ERROR);
     }
     Map<String, Set<String>> instancesToLogFilesMap = new HashMap<>();

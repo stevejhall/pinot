@@ -33,10 +33,12 @@ import org.apache.pinot.spi.utils.ArrayCopyUtils;
 public class AdditionTransformFunction extends BaseTransformFunction {
   public static final String FUNCTION_NAME = "add";
 
-  private final List<TransformFunction> _transformFunctions = new ArrayList<>();
   private DataType _resultDataType;
   private double _literalDoubleSum = 0.0;
   private BigDecimal _literalBigDecimalSum = BigDecimal.ZERO;
+  private List<TransformFunction> _transformFunctions = new ArrayList<>();
+  private double[] _doubleSums;
+  private BigDecimal[] _bigDecimalSums;
 
   @Override
   public String getName() {
@@ -87,42 +89,44 @@ public class AdditionTransformFunction extends BaseTransformFunction {
   @Override
   public double[] transformToDoubleValuesSV(ProjectionBlock projectionBlock) {
     int length = projectionBlock.getNumDocs();
-    if (_doubleValuesSV == null) {
-      _doubleValuesSV = new double[length];
+    if (_doubleSums == null || _doubleSums.length < length) {
+      _doubleSums = new double[length];
     }
+
     if (_resultDataType == DataType.BIG_DECIMAL) {
       BigDecimal[] values = transformToBigDecimalValuesSV(projectionBlock);
-      ArrayCopyUtils.copy(values, _doubleValuesSV, length);
+      ArrayCopyUtils.copy(values, _doubleSums, length);
     } else {
-      Arrays.fill(_doubleValuesSV, 0, length, _literalDoubleSum);
+      Arrays.fill(_doubleSums, 0, length, _literalDoubleSum);
       for (TransformFunction transformFunction : _transformFunctions) {
         double[] values = transformFunction.transformToDoubleValuesSV(projectionBlock);
         for (int i = 0; i < length; i++) {
-          _doubleValuesSV[i] += values[i];
+          _doubleSums[i] += values[i];
         }
       }
     }
-    return _doubleValuesSV;
+    return _doubleSums;
   }
 
   @Override
   public BigDecimal[] transformToBigDecimalValuesSV(ProjectionBlock projectionBlock) {
     int length = projectionBlock.getNumDocs();
-    if (_bigDecimalValuesSV == null) {
-      _bigDecimalValuesSV = new BigDecimal[length];
+    if (_bigDecimalSums == null || _bigDecimalSums.length < length) {
+      _bigDecimalSums = new BigDecimal[length];
     }
+
     if (_resultDataType == DataType.DOUBLE) {
       double[] values = transformToDoubleValuesSV(projectionBlock);
-      ArrayCopyUtils.copy(values, _bigDecimalValuesSV, length);
+      ArrayCopyUtils.copy(values, _bigDecimalSums, length);
     } else {
-      Arrays.fill(_bigDecimalValuesSV, 0, length, _literalBigDecimalSum);
+      Arrays.fill(_bigDecimalSums, 0, length, _literalBigDecimalSum);
       for (TransformFunction transformFunction : _transformFunctions) {
         BigDecimal[] values = transformFunction.transformToBigDecimalValuesSV(projectionBlock);
         for (int i = 0; i < length; i++) {
-          _bigDecimalValuesSV[i] = _bigDecimalValuesSV[i].add(values[i]);
+          _bigDecimalSums[i] = _bigDecimalSums[i].add(values[i]);
         }
       }
     }
-    return _bigDecimalValuesSV;
+    return _bigDecimalSums;
   }
 }

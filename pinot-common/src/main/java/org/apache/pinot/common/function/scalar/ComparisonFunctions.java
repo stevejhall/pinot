@@ -19,6 +19,7 @@
 package org.apache.pinot.common.function.scalar;
 
 import org.apache.pinot.spi.annotations.ScalarFunction;
+import org.apache.pinot.spi.utils.BooleanUtils;
 
 
 public class ComparisonFunctions {
@@ -28,27 +29,27 @@ public class ComparisonFunctions {
   private ComparisonFunctions() {
   }
 
-  @ScalarFunction(names = {"greater_than", "greaterThan"})
+  @ScalarFunction
   public static boolean greaterThan(double a, double b) {
     return a > b;
   }
 
-  @ScalarFunction(names = {"greater_than_or_equal", "greaterThanOrEqual"})
+  @ScalarFunction
   public static boolean greaterThanOrEqual(double a, double b) {
     return a >= b;
   }
 
-  @ScalarFunction(names = {"less_than", "lessThan"})
+  @ScalarFunction
   public static boolean lessThan(double a, double b) {
     return a < b;
   }
 
-  @ScalarFunction(names = {"less_than_or_equal", "lessThanOrEqual"})
+  @ScalarFunction
   public static boolean lessThanOrEqual(double a, double b) {
     return a <= b;
   }
 
-  @ScalarFunction(names = {"not_equals", "notEquals"})
+  @ScalarFunction
   public static boolean notEquals(double a, double b) {
     return Math.abs(a - b) >= DOUBLE_COMPARISON_TOLERANCE;
   }
@@ -62,5 +63,10 @@ public class ComparisonFunctions {
   @ScalarFunction
   public static boolean between(double val, double a, double b) {
     return val > a && val < b;
+  }
+
+  @ScalarFunction
+  public static Object caseWhen(Object comparisonResult, Object left, Object right) {
+    return BooleanUtils.toBoolean(comparisonResult) ? left : right;
   }
 }

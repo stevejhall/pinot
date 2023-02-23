@@ -39,7 +39,6 @@ import org.apache.pinot.common.lineage.SegmentLineageUtils;
 import org.apache.pinot.common.metadata.segment.SegmentZKMetadata;
 import org.apache.pinot.common.metrics.ControllerGauge;
 import org.apache.pinot.common.metrics.ControllerMetrics;
-import org.apache.pinot.common.metrics.MetricValueUtils;
 import org.apache.pinot.common.utils.LLCSegmentName;
 import org.apache.pinot.controller.ControllerConf;
 import org.apache.pinot.controller.LeadControllerManager;
@@ -143,7 +142,6 @@ public class SegmentStatusCheckerTest {
       _tableSizeReader = mock(TableSizeReader.class);
       when(_tableSizeReader.getTableSizeDetails(anyString(), anyInt())).thenReturn(null);
     }
-    PinotMetricUtils.cleanUp();
     _metricsRegistry = PinotMetricUtils.getPinotMetricsRegistry();
     _controllerMetrics = new ControllerMetrics(_metricsRegistry);
     _segmentStatusChecker =
@@ -152,22 +150,25 @@ public class SegmentStatusCheckerTest {
     _segmentStatusChecker.setTableSizeReader(_tableSizeReader);
     _segmentStatusChecker.start();
     _segmentStatusChecker.run();
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-        ControllerGauge.REPLICATION_FROM_CONFIG), 2);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.SEGMENT_COUNT), 3);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.SEGMENT_COUNT_INCLUDING_REPLACED), 5);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.SEGMENTS_IN_ERROR_STATE), 1);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.NUMBER_OF_REPLICAS), 2);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.PERCENT_OF_REPLICAS), 66);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.PERCENT_SEGMENTS_AVAILABLE), 100);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.TABLE_COMPRESSED_SIZE), 0);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.REPLICATION_FROM_CONFIG), 2);
+    Assert
+        .assertEquals(_controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.SEGMENT_COUNT), 3);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.SEGMENT_COUNT_INCLUDING_REPLACED),
+        5);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.SEGMENTS_IN_ERROR_STATE), 1);
+    Assert
+        .assertEquals(_controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.NUMBER_OF_REPLICAS),
+            2);
+    Assert
+        .assertEquals(
+            _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.PERCENT_OF_REPLICAS),
+            66);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.PERCENT_SEGMENTS_AVAILABLE), 100);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.TABLE_COMPRESSED_SIZE), 0);
   }
 
   @Test
@@ -232,7 +233,6 @@ public class SegmentStatusCheckerTest {
       _tableSizeReader = mock(TableSizeReader.class);
       when(_tableSizeReader.getTableSizeDetails(anyString(), anyInt())).thenReturn(null);
     }
-    PinotMetricUtils.cleanUp();
     _metricsRegistry = PinotMetricUtils.getPinotMetricsRegistry();
     _controllerMetrics = new ControllerMetrics(_metricsRegistry);
     _segmentStatusChecker =
@@ -241,18 +241,20 @@ public class SegmentStatusCheckerTest {
     _segmentStatusChecker.setTableSizeReader(_tableSizeReader);
     _segmentStatusChecker.start();
     _segmentStatusChecker.run();
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-            ControllerGauge.REPLICATION_FROM_CONFIG), 3);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.SEGMENTS_IN_ERROR_STATE), 0);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.NUMBER_OF_REPLICAS), 3);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.PERCENT_OF_REPLICAS), 100);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.PERCENT_SEGMENTS_AVAILABLE), 100);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.MISSING_CONSUMING_SEGMENT_TOTAL_COUNT), 2);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.REPLICATION_FROM_CONFIG), 3);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.SEGMENTS_IN_ERROR_STATE), 0);
+    Assert
+        .assertEquals(_controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.NUMBER_OF_REPLICAS),
+            3);
+    Assert
+        .assertEquals(
+            _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.PERCENT_OF_REPLICAS),
+            100);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.PERCENT_SEGMENTS_AVAILABLE), 100);
+    Assert.assertEquals(_controllerMetrics
+        .getValueOfTableGauge(externalView.getId(), ControllerGauge.MISSING_CONSUMING_SEGMENT_TOTAL_COUNT), 2);
   }
 
   Map<String, String> getStreamConfigMap() {
@@ -332,7 +334,6 @@ public class SegmentStatusCheckerTest {
       _tableSizeReader = mock(TableSizeReader.class);
       when(_tableSizeReader.getTableSizeDetails(anyString(), anyInt())).thenReturn(null);
     }
-    PinotMetricUtils.cleanUp();
     _metricsRegistry = PinotMetricUtils.getPinotMetricsRegistry();
     _controllerMetrics = new ControllerMetrics(_metricsRegistry);
     _segmentStatusChecker =
@@ -341,14 +342,15 @@ public class SegmentStatusCheckerTest {
     _segmentStatusChecker.setTableSizeReader(_tableSizeReader);
     _segmentStatusChecker.start();
     _segmentStatusChecker.run();
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.SEGMENTS_IN_ERROR_STATE), 1);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.NUMBER_OF_REPLICAS), 0);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.PERCENT_SEGMENTS_AVAILABLE), 75);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.TABLE_COMPRESSED_SIZE), 1111);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.SEGMENTS_IN_ERROR_STATE), 1);
+    Assert
+        .assertEquals(_controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.NUMBER_OF_REPLICAS),
+            0);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.PERCENT_SEGMENTS_AVAILABLE), 75);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.TABLE_COMPRESSED_SIZE), 1111);
   }
 
   @Test
@@ -389,7 +391,6 @@ public class SegmentStatusCheckerTest {
       _tableSizeReader = mock(TableSizeReader.class);
       when(_tableSizeReader.getTableSizeDetails(anyString(), anyInt())).thenReturn(null);
     }
-    PinotMetricUtils.cleanUp();
     _metricsRegistry = PinotMetricUtils.getPinotMetricsRegistry();
     _controllerMetrics = new ControllerMetrics(_metricsRegistry);
     _segmentStatusChecker =
@@ -398,12 +399,10 @@ public class SegmentStatusCheckerTest {
     _segmentStatusChecker.setTableSizeReader(_tableSizeReader);
     _segmentStatusChecker.start();
     _segmentStatusChecker.run();
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-            ControllerGauge.SEGMENTS_IN_ERROR_STATE), 0);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-            ControllerGauge.NUMBER_OF_REPLICAS), 0);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-            ControllerGauge.TABLE_COMPRESSED_SIZE), 0);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.SEGMENTS_IN_ERROR_STATE), 0);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.NUMBER_OF_REPLICAS), 0);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.TABLE_COMPRESSED_SIZE), 0);
   }
 
   @Test
@@ -432,7 +431,6 @@ public class SegmentStatusCheckerTest {
       _tableSizeReader = mock(TableSizeReader.class);
       when(_tableSizeReader.getTableSizeDetails(anyString(), anyInt())).thenReturn(null);
     }
-    PinotMetricUtils.cleanUp();
     _metricsRegistry = PinotMetricUtils.getPinotMetricsRegistry();
     _controllerMetrics = new ControllerMetrics(_metricsRegistry);
     _segmentStatusChecker =
@@ -441,14 +439,14 @@ public class SegmentStatusCheckerTest {
     _segmentStatusChecker.setTableSizeReader(_tableSizeReader);
     _segmentStatusChecker.start();
     _segmentStatusChecker.run();
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-            ControllerGauge.SEGMENTS_IN_ERROR_STATE), Long.MIN_VALUE);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-            ControllerGauge.NUMBER_OF_REPLICAS), Long.MIN_VALUE);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-            ControllerGauge.PERCENT_OF_REPLICAS), Long.MIN_VALUE);
-    Assert.assertFalse(MetricValueUtils.tableGaugeExists(_controllerMetrics, tableName,
-            ControllerGauge.TABLE_COMPRESSED_SIZE));
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.SEGMENTS_IN_ERROR_STATE),
+        Long.MIN_VALUE);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.NUMBER_OF_REPLICAS),
+        Long.MIN_VALUE);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.PERCENT_OF_REPLICAS),
+        Long.MIN_VALUE);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.TABLE_COMPRESSED_SIZE), 0);
   }
 
   @Test
@@ -524,7 +522,6 @@ public class SegmentStatusCheckerTest {
       _tableSizeReader = mock(TableSizeReader.class);
       when(_tableSizeReader.getTableSizeDetails(anyString(), anyInt())).thenReturn(null);
     }
-    PinotMetricUtils.cleanUp();
     _metricsRegistry = PinotMetricUtils.getPinotMetricsRegistry();
     _controllerMetrics = new ControllerMetrics(_metricsRegistry);
     _segmentStatusChecker =
@@ -533,16 +530,19 @@ public class SegmentStatusCheckerTest {
     _segmentStatusChecker.setTableSizeReader(_tableSizeReader);
     _segmentStatusChecker.start();
     _segmentStatusChecker.run();
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.SEGMENTS_IN_ERROR_STATE), 0);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.NUMBER_OF_REPLICAS), 2);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.PERCENT_OF_REPLICAS), 100);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.PERCENT_SEGMENTS_AVAILABLE), 100);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, externalView.getId(),
-            ControllerGauge.TABLE_COMPRESSED_SIZE), 0);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.SEGMENTS_IN_ERROR_STATE), 0);
+    Assert
+        .assertEquals(_controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.NUMBER_OF_REPLICAS),
+            2);
+    Assert
+        .assertEquals(
+            _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.PERCENT_OF_REPLICAS),
+            100);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.PERCENT_SEGMENTS_AVAILABLE), 100);
+    Assert.assertEquals(
+        _controllerMetrics.getValueOfTableGauge(externalView.getId(), ControllerGauge.TABLE_COMPRESSED_SIZE), 0);
   }
 
   @Test
@@ -579,7 +579,6 @@ public class SegmentStatusCheckerTest {
       _tableSizeReader = mock(TableSizeReader.class);
       when(_tableSizeReader.getTableSizeDetails(anyString(), anyInt())).thenReturn(null);
     }
-    PinotMetricUtils.cleanUp();
     _metricsRegistry = PinotMetricUtils.getPinotMetricsRegistry();
     _controllerMetrics = new ControllerMetrics(_metricsRegistry);
     _segmentStatusChecker =
@@ -588,14 +587,11 @@ public class SegmentStatusCheckerTest {
     _segmentStatusChecker.setTableSizeReader(_tableSizeReader);
     _segmentStatusChecker.start();
     _segmentStatusChecker.run();
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-        ControllerGauge.SEGMENTS_IN_ERROR_STATE), 0);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-            ControllerGauge.NUMBER_OF_REPLICAS), 1);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-        ControllerGauge.PERCENT_OF_REPLICAS), 100);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-            ControllerGauge.PERCENT_SEGMENTS_AVAILABLE), 100);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.SEGMENTS_IN_ERROR_STATE), 0);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.NUMBER_OF_REPLICAS), 1);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.PERCENT_OF_REPLICAS), 100);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.PERCENT_SEGMENTS_AVAILABLE),
+        100);
   }
 
   @Test
@@ -629,20 +625,17 @@ public class SegmentStatusCheckerTest {
       _leadControllerManager = mock(LeadControllerManager.class);
       when(_leadControllerManager.isLeaderForTable(anyString())).thenReturn(true);
     }
-    PinotMetricUtils.cleanUp();
     _metricsRegistry = PinotMetricUtils.getPinotMetricsRegistry();
     _controllerMetrics = new ControllerMetrics(_metricsRegistry);
     _segmentStatusChecker =
         new SegmentStatusChecker(_helixResourceManager, _leadControllerManager, _config, _controllerMetrics,
             _executorService);
     // verify state before test
-    Assert.assertEquals(
-        MetricValueUtils.getGlobalGaugeValue(_controllerMetrics, ControllerGauge.DISABLED_TABLE_COUNT), 0);
+    Assert.assertEquals(_controllerMetrics.getValueOfGlobalGauge(ControllerGauge.DISABLED_TABLE_COUNT), 0);
     // update metrics
     _segmentStatusChecker.start();
     _segmentStatusChecker.run();
-    Assert.assertEquals(
-        MetricValueUtils.getGlobalGaugeValue(_controllerMetrics, ControllerGauge.DISABLED_TABLE_COUNT), 1);
+    Assert.assertEquals(_controllerMetrics.getValueOfGlobalGauge(ControllerGauge.DISABLED_TABLE_COUNT), 1);
   }
 
   @Test
@@ -672,20 +665,17 @@ public class SegmentStatusCheckerTest {
       _leadControllerManager = mock(LeadControllerManager.class);
       when(_leadControllerManager.isLeaderForTable(anyString())).thenReturn(true);
     }
-    PinotMetricUtils.cleanUp();
     _metricsRegistry = PinotMetricUtils.getPinotMetricsRegistry();
     _controllerMetrics = new ControllerMetrics(_metricsRegistry);
     _segmentStatusChecker =
         new SegmentStatusChecker(_helixResourceManager, _leadControllerManager, _config, _controllerMetrics,
             _executorService);
     // verify state before test
-    Assert.assertFalse(
-        MetricValueUtils.globalGaugeExists(_controllerMetrics, ControllerGauge.DISABLED_TABLE_COUNT));
+    Assert.assertEquals(_controllerMetrics.getValueOfGlobalGauge(ControllerGauge.DISABLED_TABLE_COUNT), 0);
     // update metrics
     _segmentStatusChecker.start();
     _segmentStatusChecker.run();
-    Assert.assertEquals(
-        MetricValueUtils.getGlobalGaugeValue(_controllerMetrics, ControllerGauge.DISABLED_TABLE_COUNT), 1);
+    Assert.assertEquals(_controllerMetrics.getValueOfGlobalGauge(ControllerGauge.DISABLED_TABLE_COUNT), 1);
   }
 
   @Test
@@ -730,7 +720,6 @@ public class SegmentStatusCheckerTest {
       _tableSizeReader = mock(TableSizeReader.class);
       when(_tableSizeReader.getTableSizeDetails(anyString(), anyInt())).thenReturn(null);
     }
-    PinotMetricUtils.cleanUp();
     _metricsRegistry = PinotMetricUtils.getPinotMetricsRegistry();
     _controllerMetrics = new ControllerMetrics(_metricsRegistry);
     _segmentStatusChecker =
@@ -739,14 +728,12 @@ public class SegmentStatusCheckerTest {
     _segmentStatusChecker.setTableSizeReader(_tableSizeReader);
     _segmentStatusChecker.start();
     _segmentStatusChecker.run();
-
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-        ControllerGauge.SEGMENTS_IN_ERROR_STATE), Long.MIN_VALUE);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-        ControllerGauge.NUMBER_OF_REPLICAS), nReplicasExpectedValue);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-        ControllerGauge.PERCENT_OF_REPLICAS), 100);
-    Assert.assertEquals(MetricValueUtils.getTableGaugeValue(_controllerMetrics, tableName,
-        ControllerGauge.PERCENT_SEGMENTS_AVAILABLE), 100);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.SEGMENTS_IN_ERROR_STATE),
+        Long.MIN_VALUE);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.NUMBER_OF_REPLICAS),
+        nReplicasExpectedValue);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.PERCENT_OF_REPLICAS), 100);
+    Assert.assertEquals(_controllerMetrics.getValueOfTableGauge(tableName, ControllerGauge.PERCENT_SEGMENTS_AVAILABLE),
+        100);
   }
 }

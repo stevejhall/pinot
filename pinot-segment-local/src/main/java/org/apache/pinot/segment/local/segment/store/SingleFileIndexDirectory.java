@@ -44,7 +44,6 @@ import org.apache.pinot.segment.spi.index.metadata.SegmentMetadataImpl;
 import org.apache.pinot.segment.spi.memory.PinotDataBuffer;
 import org.apache.pinot.segment.spi.store.ColumnIndexDirectory;
 import org.apache.pinot.segment.spi.store.ColumnIndexType;
-import org.apache.pinot.segment.spi.store.ColumnIndexUtils;
 import org.apache.pinot.spi.env.CommonsConfigurationUtils;
 import org.apache.pinot.spi.utils.ReadMode;
 import org.slf4j.Logger;
@@ -71,6 +70,9 @@ class SingleFileIndexDirectory extends ColumnIndexDirectory {
 
   private static final long MAGIC_MARKER = 0xdeadbeefdeafbeadL;
   private static final int MAGIC_MARKER_SIZE_BYTES = 8;
+  private static final String MAP_KEY_SEPARATOR = ".";
+  private static final String MAP_KEY_NAME_START_OFFSET = "startOffset";
+  private static final String MAP_KEY_NAME_SIZE = "size";
 
   // Max size of buffer we want to allocate
   // ByteBuffer limits the size to 2GB - (some platform dependent size)
@@ -216,17 +218,29 @@ class SingleFileIndexDirectory extends ColumnIndexDirectory {
     PropertiesConfiguration mapConfig = CommonsConfigurationUtils.fromFile(mapFile);
 
     for (String key : CommonsConfigurationUtils.getKeys(mapConfig)) {
-      String[] parsedKeys = ColumnIndexUtils.parseIndexMapKeys(key, _segmentDirectory.getPath());
-      IndexKey indexKey = new IndexKey(parsedKeys[0], ColumnIndexType.getValue(parsedKeys[1]));
+      // column names can have '.' in it hence scan from backwards
+      // parsing names like "column.name.dictionary.startOffset"
+      // or, "column.name.dictionary.endOffset" where column.name is the key
+      int lastSeparatorPos = key.lastIndexOf(MAP_KEY_SEPARATOR);
+      Preconditions
+          .checkState(lastSeparatorPos != -1, "Key separator not found: " + key + ", segment: " + _segmentDirectory);
+      String propertyName = key.substring(lastSeparatorPos + 1);
+
+      int indexSeparatorPos = key.lastIndexOf(MAP_KEY_SEPARATOR, lastSeparatorPos - 1);
+      Preconditions.checkState(indexSeparatorPos != -1,
+          "Index separator not found: " + key + " , segment: " + _segmentDirectory);
+      String indexName = key.substring(indexSeparatorPos + 1, lastSeparatorPos);
+      String columnName = key.substring(0, indexSeparatorPos);
+      IndexKey indexKey = new IndexKey(columnName, ColumnIndexType.getValue(indexName));
       IndexEntry entry = _columnEntries.get(indexKey);
       if (entry == null) {
         entry = new IndexEntry(indexKey);
         _columnEntries.put(indexKey, entry);
       }
 
-      if (parsedKeys[2].equals(ColumnIndexUtils.MAP_KEY_NAME_START_OFFSET)) {
+      if (propertyName.equals(MAP_KEY_NAME_START_OFFSET)) {
         entry._startOffset = mapConfig.getLong(key);
-      } else if (parsedKeys[2].equals(ColumnIndexUtils.MAP_KEY_NAME_SIZE)) {
+      } else if (propertyName.equals(MAP_KEY_NAME_SIZE)) {
         entry._size = mapConfig.getLong(key);
       } else {
         throw new ConfigurationException(
@@ -391,7 +405,7 @@ class SingleFileIndexDirectory extends ColumnIndexDirectory {
 
   @Override
   public String toString() {
-    return _indexFile.toString();
+    return _segmentDirectory.toString() + "/" + _indexFile.toString();
   }
 
   /**
@@ -425,8 +439,7 @@ class SingleFileIndexDirectory extends ColumnIndexDirectory {
   }
 
   private static String getKey(String column, String indexName, boolean isStartOffset) {
-    return column + ColumnIndexUtils.MAP_KEY_SEPARATOR + indexName + ColumnIndexUtils.MAP_KEY_SEPARATOR
-        + (isStartOffset ? "startOffset" : "size");
+    return column + MAP_KEY_SEPARATOR + indexName + MAP_KEY_SEPARATOR + (isStartOffset ? "startOffset" : "size");
   }
 
   @VisibleForTesting

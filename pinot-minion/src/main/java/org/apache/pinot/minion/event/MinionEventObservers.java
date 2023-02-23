@@ -26,7 +26,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 import org.apache.pinot.minion.MinionConf;
 import org.apache.pinot.spi.utils.CommonConstants;
 import org.slf4j.Logger;
@@ -63,7 +62,6 @@ public class MinionEventObservers {
       LOGGER.info("Configured to clean up task event observers immediately");
       return;
     }
-    LOGGER.info("Configured to clean up task event observers with cleanupDelayMs: {}", _eventObserverCleanupDelayMs);
     _cleanupExecutor.submit(() -> {
       LOGGER.info("Start to cleanup task event observers with cleanupDelayMs: {}", _eventObserverCleanupDelayMs);
       while (!Thread.interrupted()) {
@@ -99,36 +97,11 @@ public class MinionEventObservers {
   }
 
   public static MinionEventObservers getInstance() {
-    if (_customInstance != null) {
-      return _customInstance;
-    }
-    // Test code might reach here, but this should never happen in prod case, as instance is created upon worker
-    // starts before any tasks can run. But log something for debugging just in case.
-    LOGGER.warn("Using default MinionEventObservers instance");
-    return DEFAULT_INSTANCE;
+    return _customInstance != null ? _customInstance : DEFAULT_INSTANCE;
   }
 
   public MinionEventObserver getMinionEventObserver(String taskId) {
     return _taskEventObservers.get(taskId);
-  }
-
-  /**
-   * Gets all {@link MinionEventObserver}s
-   * @return a map of subtask ID to {@link MinionEventObserver}
-   */
-  public Map<String, MinionEventObserver> getMinionEventObservers() {
-    return _taskEventObservers;
-  }
-
-  /**
-   * Gets all {@link MinionEventObserver}s with the given {@link MinionTaskState}
-   * @param taskState the {@link MinionTaskState} to match
-   * @return a map of subtask ID to {@link MinionEventObserver}
-   */
-  public Map<String, MinionEventObserver> getMinionEventObserverWithGivenState(MinionTaskState taskState) {
-    return _taskEventObservers.entrySet().stream()
-        .filter(e -> e.getValue().getTaskState() == taskState)
-        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
   }
 
   public void addMinionEventObserver(String taskId, MinionEventObserver eventObserver) {

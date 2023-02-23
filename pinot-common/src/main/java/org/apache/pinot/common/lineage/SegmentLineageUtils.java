@@ -26,6 +26,7 @@ import java.util.UUID;
  * Util class for Segment Lineage
  */
 public class SegmentLineageUtils {
+
   private SegmentLineageUtils() {
   }
 
@@ -44,11 +45,12 @@ public class SegmentLineageUtils {
    */
   public static void filterSegmentsBasedOnLineageInPlace(Set<String> segments, SegmentLineage segmentLineage) {
     if (segmentLineage != null) {
-      for (LineageEntry lineageEntry : segmentLineage.getLineageEntries().values()) {
+      for (String lineageEntryId : segmentLineage.getLineageEntryIds()) {
+        LineageEntry lineageEntry = segmentLineage.getLineageEntry(lineageEntryId);
         if (lineageEntry.getState() == LineageEntryState.COMPLETED) {
-          lineageEntry.getSegmentsFrom().forEach(segments::remove);
+          segments.removeAll(lineageEntry.getSegmentsFrom());
         } else {
-          lineageEntry.getSegmentsTo().forEach(segments::remove);
+          segments.removeAll(lineageEntry.getSegmentsTo());
         }
       }
     }

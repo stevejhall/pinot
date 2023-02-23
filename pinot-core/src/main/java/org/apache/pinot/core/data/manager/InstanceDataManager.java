@@ -21,7 +21,6 @@ package org.apache.pinot.core.data.manager;
 import java.io.File;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Supplier;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.configuration.ConfigurationException;
@@ -46,7 +45,6 @@ public interface InstanceDataManager {
   /**
    * Initializes the data manager.
    * <p>Should be called only once and before calling any other method.
-   * <p>NOTE: The config is the subset of server config with prefix 'pinot.server.instance'
    */
   void init(PinotConfiguration config, HelixManager helixManager, ServerMetrics serverMetrics)
       throws ConfigurationException;
@@ -88,15 +86,9 @@ public interface InstanceDataManager {
       throws Exception;
 
   /**
-   * Offloads a segment from table but not dropping its data from server.
+   * Removes a segment from a table.
    */
-  void offloadSegment(String tableNameWithType, String segmentName)
-      throws Exception;
-
-  /**
-   * Delete segment data from the server physically.
-   */
-  void deleteSegment(String tableNameWithType, String segmentName)
+  void removeSegment(String tableNameWithType, String segmentName)
       throws Exception;
 
   /**
@@ -112,15 +104,6 @@ public interface InstanceDataManager {
    * @param segmentRefreshSemaphore semaphore to control concurrent segment reloads/refresh
    */
   void reloadAllSegments(String tableNameWithType, boolean forceDownload,
-      SegmentRefreshSemaphore segmentRefreshSemaphore)
-      throws Exception;
-
-  /**
-   * Reload a list of segments in a table.
-   * @param segmentNames is the list of segment to reload
-   * @param segmentRefreshSemaphore semaphore to control concurrent segment reloads/refresh
-   */
-  void reloadSegments(String tableNameWithType, List<String> segmentNames, boolean forceDownload,
       SegmentRefreshSemaphore segmentRefreshSemaphore)
       throws Exception;
 
@@ -185,11 +168,4 @@ public interface InstanceDataManager {
    * Immediately stop consumption and start committing the consuming segments.
    */
   void forceCommit(String tableNameWithType, Set<String> segmentNames);
-
-  /**
-   * Enables the installation of a method to determine if a server is ready to server queries.
-   *
-   * @param isServerReadyToServeQueries supplier to retrieve state of server.
-   */
-  void setSupplierOfIsServerReadyToServeQueries(Supplier<Boolean> isServerReadyToServeQueries);
 }

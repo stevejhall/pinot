@@ -33,9 +33,10 @@ import org.apache.pinot.spi.data.readers.RecordReader;
 
 
 public class AvroRecordReaderTest extends AbstractRecordReaderTest {
+  private final File _dataFile = new File(_tempDir, "data.avro");
 
   @Override
-  protected RecordReader createRecordReader(File file)
+  protected RecordReader createRecordReader()
       throws Exception {
     AvroRecordReader avroRecordReader = new AvroRecordReader();
     avroRecordReader.init(_dataFile, _sourceFields, null);
@@ -57,10 +58,5 @@ public class AvroRecordReaderTest extends AbstractRecordReaderTest {
         fileWriter.append(record);
       }
     }
-  }
-
-  @Override
-  protected String getDataFileName() {
-    return "data.avro";
   }
 }

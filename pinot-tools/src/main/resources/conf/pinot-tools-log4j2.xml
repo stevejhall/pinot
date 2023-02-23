@@ -21,10 +21,10 @@
 -->
 <Configuration>
   <Appenders>
-    <Console name="console" target="SYSTEM_OUT" follow="true" />
+    <Console name="console" target="SYSTEM_OUT"/>
   </Appenders>
   <Loggers>
-    <Root level="info">
+    <Root level="info" additivity="false">
       <AppenderRef ref="console"/>
     </Root>
     <Logger name="org.apache.pinot" level="info" additivity="false"/>

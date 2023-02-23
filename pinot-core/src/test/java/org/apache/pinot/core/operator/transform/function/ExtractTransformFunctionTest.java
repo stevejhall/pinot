@@ -36,7 +36,7 @@ public class ExtractTransformFunctionTest extends BaseTransformFunctionTest {
     return new Object[][]{
         //@formatter:off
         {"year", (LongToIntFunction) DateTimeFunctions::year},
-        {"month", (LongToIntFunction) DateTimeFunctions::monthOfYear},
+        {"month", (LongToIntFunction) DateTimeFunctions::month},
         {"day", (LongToIntFunction) DateTimeFunctions::dayOfMonth},
         {"hour", (LongToIntFunction) DateTimeFunctions::hour},
         {"minute", (LongToIntFunction) DateTimeFunctions::minute},

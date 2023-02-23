@@ -19,7 +19,6 @@
 package org.apache.pinot.core.common;
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog;
-import com.clearspring.analytics.stream.cardinality.RegisterSet;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.primitives.Longs;
@@ -51,7 +50,6 @@ import it.unimi.dsi.fastutil.objects.ObjectSet;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
-import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -59,7 +57,7 @@ import java.util.Map;
 import java.util.Set;
 import org.apache.datasketches.memory.Memory;
 import org.apache.datasketches.theta.Sketch;
-import org.apache.pinot.common.CustomObject;
+import org.apache.pinot.common.datatable.DataTable;
 import org.apache.pinot.core.query.distinct.DistinctTable;
 import org.apache.pinot.core.query.utils.idset.IdSet;
 import org.apache.pinot.core.query.utils.idset.IdSets;
@@ -70,10 +68,8 @@ import org.apache.pinot.segment.local.customobject.FloatLongPair;
 import org.apache.pinot.segment.local.customobject.IntLongPair;
 import org.apache.pinot.segment.local.customobject.LongLongPair;
 import org.apache.pinot.segment.local.customobject.MinMaxRangePair;
-import org.apache.pinot.segment.local.customobject.PinotFourthMoment;
 import org.apache.pinot.segment.local.customobject.QuantileDigest;
 import org.apache.pinot.segment.local.customobject.StringLongPair;
-import org.apache.pinot.segment.local.customobject.VarianceTuple;
 import org.apache.pinot.segment.local.utils.GeometrySerializer;
 import org.apache.pinot.spi.utils.BigDecimalUtils;
 import org.apache.pinot.spi.utils.ByteArray;
@@ -125,9 +121,7 @@ public class ObjectSerDeUtils {
     FloatLongPair(29),
     DoubleLongPair(30),
     StringLongPair(31),
-    CovarianceTuple(32),
-    VarianceTuple(33),
-    PinotFourthMoment(34);
+    CovarianceTuple(32);
 
     private final int _value;
 
@@ -209,10 +203,6 @@ public class ObjectSerDeUtils {
         return ObjectType.StringLongPair;
       } else if (value instanceof CovarianceTuple) {
         return ObjectType.CovarianceTuple;
-      } else if (value instanceof VarianceTuple) {
-        return ObjectType.VarianceTuple;
-      } else if (value instanceof PinotFourthMoment) {
-        return ObjectType.PinotFourthMoment;
       } else {
         throw new IllegalArgumentException("Unsupported type of value: " + value.getClass().getSimpleName());
       }
@@ -470,41 +460,6 @@ public class ObjectSerDeUtils {
     }
   };
 
-  public static final ObjectSerDe<VarianceTuple> VARIANCE_TUPLE_OBJECT_SER_DE = new ObjectSerDe<VarianceTuple>() {
-    @Override
-    public byte[] serialize(VarianceTuple varianceTuple) {
-      return varianceTuple.toBytes();
-    }
-
-    @Override
-    public VarianceTuple deserialize(byte[] bytes) {
-      return VarianceTuple.fromBytes(bytes);
-    }
-
-    @Override
-    public VarianceTuple deserialize(ByteBuffer byteBuffer) {
-      return VarianceTuple.fromByteBuffer(byteBuffer);
-    }
-  };
-
-  public static final ObjectSerDe<PinotFourthMoment> PINOT_FOURTH_MOMENT_OBJECT_SER_DE
-      = new ObjectSerDe<PinotFourthMoment>() {
-    @Override
-    public byte[] serialize(PinotFourthMoment value) {
-      return value.serialize();
-    }
-
-    @Override
-    public PinotFourthMoment deserialize(byte[] bytes) {
-      return PinotFourthMoment.fromBytes(bytes);
-    }
-
-    @Override
-    public PinotFourthMoment deserialize(ByteBuffer byteBuffer) {
-      return PinotFourthMoment.fromBytes(byteBuffer);
-    }
-  };
-
   public static final ObjectSerDe<HyperLogLog> HYPER_LOG_LOG_SER_DE = new ObjectSerDe<HyperLogLog>() {
 
     @Override
@@ -518,25 +473,21 @@ public class ObjectSerDeUtils {
 
     @Override
     public HyperLogLog deserialize(byte[] bytes) {
-      return deserialize(ByteBuffer.wrap(bytes));
+      try {
+        return HyperLogLog.Builder.build(bytes);
+      } catch (IOException e) {
+        throw new RuntimeException("Caught exception while de-serializing HyperLogLog", e);
+      }
     }
 
     @Override
     public HyperLogLog deserialize(ByteBuffer byteBuffer) {
-      // NOTE: The passed in byte buffer is always BIG ENDIAN
-      return deserialize(byteBuffer.asIntBuffer());
-    }
-
-    private HyperLogLog deserialize(IntBuffer intBuffer) {
+      byte[] bytes = new byte[byteBuffer.remaining()];
+      byteBuffer.get(bytes);
       try {
-        // The first 2 integers are constant headers for the HLL: log2m and size in bytes
-        int log2m = intBuffer.get();
-        int numBits = intBuffer.get() >>> 2;
-        int[] bits = new int[numBits];
-        intBuffer.get(bits);
-        return new HyperLogLog(log2m, new RegisterSet(1 << log2m, bits));
-      } catch (RuntimeException e) {
-        throw new RuntimeException("Caught exception while deserializing HyperLogLog", e);
+        return HyperLogLog.Builder.build(bytes);
+      } catch (IOException e) {
+        throw new RuntimeException("Caught exception while de-serializing HyperLogLog", e);
       }
     }
   };
@@ -1234,9 +1185,7 @@ public class ObjectSerDeUtils {
       FLOAT_LONG_PAIR_SER_DE,
       DOUBLE_LONG_PAIR_SER_DE,
       STRING_LONG_PAIR_SER_DE,
-      COVARIANCE_TUPLE_OBJECT_SER_DE,
-      VARIANCE_TUPLE_OBJECT_SER_DE,
-      PINOT_FOURTH_MOMENT_OBJECT_SER_DE
+      COVARIANCE_TUPLE_OBJECT_SER_DE
   };
   //@formatter:on
 
@@ -1244,7 +1193,7 @@ public class ObjectSerDeUtils {
     return SER_DES[objectTypeValue].serialize(value);
   }
 
-  public static <T> T deserialize(CustomObject customObject) {
+  public static <T> T deserialize(DataTable.CustomObject customObject) {
     return (T) SER_DES[customObject.getType()].deserialize(customObject.getBuffer());
   }
 

@@ -31,12 +31,12 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.helix.HelixManager;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
+import org.apache.pinot.common.datatable.DataTable;
 import org.apache.pinot.common.exception.QueryException;
 import org.apache.pinot.common.metrics.ServerMetrics;
 import org.apache.pinot.common.request.InstanceRequest;
 import org.apache.pinot.core.data.manager.InstanceDataManager;
 import org.apache.pinot.core.data.manager.offline.TableDataManagerProvider;
-import org.apache.pinot.core.operator.blocks.InstanceResponseBlock;
 import org.apache.pinot.core.query.request.ServerQueryRequest;
 import org.apache.pinot.segment.local.data.manager.TableDataManager;
 import org.apache.pinot.segment.local.data.manager.TableDataManagerConfig;
@@ -57,7 +57,6 @@ import org.apache.pinot.spi.env.PinotConfiguration;
 import org.apache.pinot.spi.metrics.PinotMetricUtils;
 import org.apache.pinot.spi.utils.ReadMode;
 import org.apache.pinot.spi.utils.builder.TableConfigBuilder;
-import org.apache.pinot.spi.utils.builder.TableNameBuilder;
 import org.apache.pinot.sql.parsers.CalciteSqlCompiler;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -76,8 +75,7 @@ public class QueryExecutorExceptionsTest {
   private static final String EMPTY_JSON_DATA_PATH = "data/test_empty_data.json";
   private static final String QUERY_EXECUTOR_CONFIG_PATH = "conf/query-executor.properties";
   private static final File INDEX_DIR = new File(FileUtils.getTempDirectory(), "QueryExecutorTest");
-  private static final String RAW_TABLE_NAME = "testTable";
-  private static final String OFFLINE_TABLE_NAME = TableNameBuilder.OFFLINE.tableNameWithType(RAW_TABLE_NAME);
+  private static final String TABLE_NAME = "testTable";
   private static final int NUM_SEGMENTS_TO_GENERATE = 2;
   private static final int NUM_EMPTY_SEGMENTS_TO_GENERATE = 2;
   private static final ExecutorService QUERY_RUNNERS = Executors.newFixedThreadPool(20);
@@ -98,10 +96,10 @@ public class QueryExecutorExceptionsTest {
     assertNotNull(resourceUrl);
     File avroFile = new File(resourceUrl.getFile());
     Schema schema = SegmentTestUtils.extractSchemaFromAvroWithoutTime(avroFile);
-    TableConfig tableConfig = new TableConfigBuilder(TableType.OFFLINE).setTableName(RAW_TABLE_NAME).build();
+    TableConfig tableConfig = new TableConfigBuilder(TableType.OFFLINE).setTableName(TABLE_NAME).build();
     for (int i = 0; i < NUM_SEGMENTS_TO_GENERATE; i++) {
       SegmentGeneratorConfig config =
-          SegmentTestUtils.getSegmentGeneratorConfig(avroFile, FileFormat.AVRO, INDEX_DIR, RAW_TABLE_NAME, tableConfig,
+          SegmentTestUtils.getSegmentGeneratorConfig(avroFile, FileFormat.AVRO, INDEX_DIR, TABLE_NAME, tableConfig,
               schema);
       config.setSegmentNamePostfix(Integer.toString(i));
       SegmentIndexCreationDriver driver = new SegmentIndexCreationDriverImpl();
@@ -120,7 +118,7 @@ public class QueryExecutorExceptionsTest {
     File jsonFile = new File(resourceUrl.getFile());
     for (int i = NUM_SEGMENTS_TO_GENERATE; i < NUM_SEGMENTS_TO_GENERATE + NUM_EMPTY_SEGMENTS_TO_GENERATE; i++) {
       SegmentGeneratorConfig config =
-          SegmentTestUtils.getSegmentGeneratorConfig(jsonFile, FileFormat.JSON, INDEX_DIR, RAW_TABLE_NAME, tableConfig,
+          SegmentTestUtils.getSegmentGeneratorConfig(jsonFile, FileFormat.JSON, INDEX_DIR, TABLE_NAME, tableConfig,
               schema);
       config.setSegmentNamePostfix(Integer.toString(i));
       SegmentIndexCreationDriver driver = new SegmentIndexCreationDriverImpl();
@@ -133,8 +131,8 @@ public class QueryExecutorExceptionsTest {
     // Mock the instance data manager
     _serverMetrics = new ServerMetrics(PinotMetricUtils.getPinotMetricsRegistry());
     TableDataManagerConfig tableDataManagerConfig = mock(TableDataManagerConfig.class);
-    when(tableDataManagerConfig.getTableName()).thenReturn(OFFLINE_TABLE_NAME);
-    when(tableDataManagerConfig.getTableType()).thenReturn(TableType.OFFLINE);
+    when(tableDataManagerConfig.getTableDataManagerType()).thenReturn("OFFLINE");
+    when(tableDataManagerConfig.getTableName()).thenReturn(TABLE_NAME);
     when(tableDataManagerConfig.getDataDir()).thenReturn(FileUtils.getTempDirectoryPath());
     InstanceDataManagerConfig instanceDataManagerConfig = mock(InstanceDataManagerConfig.class);
     when(instanceDataManagerConfig.getMaxParallelSegmentBuilds()).thenReturn(4);
@@ -149,7 +147,7 @@ public class QueryExecutorExceptionsTest {
     tableDataManager.start();
     //we don't add index segments to the data manager to simulate numSegmentsAcquired < numSegmentsQueried
     InstanceDataManager instanceDataManager = mock(InstanceDataManager.class);
-    when(instanceDataManager.getTableDataManager(OFFLINE_TABLE_NAME)).thenReturn(tableDataManager);
+    when(instanceDataManager.getTableDataManager(TABLE_NAME)).thenReturn(tableDataManager);
 
     // Set up the query executor
     resourceUrl = getClass().getClassLoader().getResource(QUERY_EXECUTOR_CONFIG_PATH);
@@ -167,10 +165,10 @@ public class QueryExecutorExceptionsTest {
    */
   @Test
   public void testServerSegmentMissingExceptionDetails() {
-    String query = "SELECT COUNT(*) FROM " + OFFLINE_TABLE_NAME;
+    String query = "SELECT COUNT(*) FROM " + TABLE_NAME;
     InstanceRequest instanceRequest = new InstanceRequest(0L, CalciteSqlCompiler.compileToBrokerRequest(query));
     instanceRequest.setSearchSegments(_segmentNames);
-    InstanceResponseBlock instanceResponse = _queryExecutor.execute(getQueryRequest(instanceRequest), QUERY_RUNNERS);
+    DataTable instanceResponse = _queryExecutor.processQuery(getQueryRequest(instanceRequest), QUERY_RUNNERS);
     Map<Integer, String> exceptions = instanceResponse.getExceptions();
     assertTrue(exceptions.containsKey(QueryException.SERVER_SEGMENT_MISSING_ERROR_CODE));
 

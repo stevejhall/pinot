@@ -29,7 +29,6 @@ import org.apache.pinot.plugin.inputformat.avro.AvroRecordExtractor;
 import org.apache.pinot.spi.data.readers.GenericRow;
 import org.apache.pinot.spi.data.readers.RecordReader;
 import org.apache.pinot.spi.data.readers.RecordReaderConfig;
-import org.apache.pinot.spi.data.readers.RecordReaderUtils;
 
 
 /**
@@ -41,8 +40,6 @@ import org.apache.pinot.spi.data.readers.RecordReaderUtils;
  *   https://javadoc.io/doc/org.apache.parquet/parquet-avro/latest/index.html</a>
  */
 public class ParquetAvroRecordReader implements RecordReader {
-  private static final String EXTENSION = "parquet";
-
   private Path _dataFilePath;
   private AvroRecordExtractor _recordExtractor;
   private ParquetReader<GenericRecord> _parquetReader;
@@ -51,8 +48,7 @@ public class ParquetAvroRecordReader implements RecordReader {
   @Override
   public void init(File dataFile, @Nullable Set<String> fieldsToRead, @Nullable RecordReaderConfig recordReaderConfig)
       throws IOException {
-    File parquetFile = RecordReaderUtils.unpackIfRequired(dataFile, EXTENSION);
-    _dataFilePath = new Path(parquetFile.getAbsolutePath());
+    _dataFilePath = new Path(dataFile.getAbsolutePath());
     _parquetReader = ParquetUtils.getParquetAvroReader(_dataFilePath);
     _recordExtractor = new AvroRecordExtractor();
     _recordExtractor.init(fieldsToRead, null);

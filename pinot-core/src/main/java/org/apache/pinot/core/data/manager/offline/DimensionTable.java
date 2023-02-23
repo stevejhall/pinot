@@ -18,20 +18,44 @@
  */
 package org.apache.pinot.core.data.manager.offline;
 
-import java.io.Closeable;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.apache.pinot.spi.data.FieldSpec;
+import org.apache.pinot.spi.data.Schema;
 import org.apache.pinot.spi.data.readers.GenericRow;
 import org.apache.pinot.spi.data.readers.PrimaryKey;
 
 
-public interface DimensionTable extends Closeable {
+class DimensionTable {
 
-  List<String> getPrimaryKeyColumns();
+  private final Map<PrimaryKey, GenericRow> _lookupTable;
+  private final Schema _tableSchema;
+  private final List<String> _primaryKeyColumns;
 
-  GenericRow get(PrimaryKey pk);
+  DimensionTable(Schema tableSchema, List<String> primaryKeyColumns) {
+    this(tableSchema, primaryKeyColumns, new HashMap<>());
+  }
 
-  boolean isEmpty();
+  DimensionTable(Schema tableSchema, List<String> primaryKeyColumns, Map<PrimaryKey, GenericRow> lookupTable) {
+    _lookupTable = lookupTable;
+    _tableSchema = tableSchema;
+    _primaryKeyColumns = primaryKeyColumns;
+  }
 
-  FieldSpec getFieldSpecFor(String columnName);
+  List<String> getPrimaryKeyColumns() {
+    return _primaryKeyColumns;
+  }
+
+  GenericRow get(PrimaryKey pk) {
+    return _lookupTable.get(pk);
+  }
+
+  boolean isEmpty() {
+    return _lookupTable.isEmpty();
+  }
+
+  FieldSpec getFieldSpecFor(String columnName) {
+    return _tableSchema.getFieldSpecFor(columnName);
+  }
 }

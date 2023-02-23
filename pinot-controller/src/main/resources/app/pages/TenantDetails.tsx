@@ -22,7 +22,7 @@ import { makeStyles } from '@material-ui/core/styles';
 import { Box, Button, FormControlLabel, Grid, Switch, Tooltip, Typography } from '@material-ui/core';
 import { RouteComponentProps, useHistory, useLocation } from 'react-router-dom';
 import { UnControlled as CodeMirror } from 'react-codemirror2';
-import { DISPLAY_SEGMENT_STATUS, TableData, TableSegmentJobs } from 'Models';
+import { TableData, TableSegmentJobs } from 'Models';
 import AppLoader from '../components/AppLoader';
 import CustomizedTables from '../components/Table';
 import TableToolbar from '../components/TableToolbar';
@@ -41,7 +41,6 @@ import { NotificationContext } from '../components/Notification/NotificationCont
 import Utils from '../utils/Utils';
 import InfoOutlinedIcon from '@material-ui/icons/InfoOutlined';
 import { get } from "lodash";
-import { SegmentStatusRenderer } from '../components/SegmentStatusRenderer';
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -176,24 +175,7 @@ const TenantPageDetails = ({ match }: RouteComponentProps<Props>) => {
       columns: ["Instance Name", "# of segments"],
       records: instanceRecords
     });
-
-    const segmentTableRows = [];
-    records.forEach(([name, status]) =>
-      segmentTableRows.push([
-        name,
-        {
-          customRenderer: (
-            <SegmentStatusRenderer
-              segmentName={name}
-              tableName={tableName}
-              status={status as DISPLAY_SEGMENT_STATUS}
-            />
-          ),
-        },
-      ])
-    );
-
-    setSegmentList({columns, records: segmentTableRows});
+    setSegmentList({columns, records});
     fetchTableSchema();
   };
 
@@ -384,7 +366,7 @@ const TenantPageDetails = ({ match }: RouteComponentProps<Props>) => {
       setShowReloadStatusModal(true);
       const [reloadStatusData, tableJobsData] = await Promise.all([
         PinotMethodUtils.reloadStatusOp(tableName, tableType),
-        PinotMethodUtils.fetchTableJobs(tableName, "RELOAD_SEGMENT,RELOAD_ALL_SEGMENTS"),
+        PinotMethodUtils.fetchTableJobs(tableName),
       ]);
 
       if(reloadStatusData.error || tableJobsData.error) {

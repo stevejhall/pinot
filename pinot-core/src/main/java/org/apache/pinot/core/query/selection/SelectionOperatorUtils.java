@@ -18,7 +18,6 @@
  */
 package org.apache.pinot.core.query.selection;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,7 +41,6 @@ import org.apache.pinot.core.common.datatable.DataTableBuilder;
 import org.apache.pinot.core.common.datatable.DataTableBuilderFactory;
 import org.apache.pinot.core.query.request.context.QueryContext;
 import org.apache.pinot.segment.spi.IndexSegment;
-import org.apache.pinot.spi.trace.Tracing;
 import org.apache.pinot.spi.utils.ArrayCopyUtils;
 import org.apache.pinot.spi.utils.ByteArray;
 import org.roaringbitmap.RoaringBitmap;
@@ -199,11 +197,8 @@ public class SelectionOperatorUtils {
   public static void mergeWithoutOrdering(Collection<Object[]> mergedRows, Collection<Object[]> rowsToMerge,
       int selectionSize) {
     Iterator<Object[]> iterator = rowsToMerge.iterator();
-    int numMergedRows = 0;
     while (mergedRows.size() < selectionSize && iterator.hasNext()) {
       mergedRows.add(iterator.next());
-      Tracing.ThreadAccountantOps.sampleAndCheckInterruptionPeriodically(numMergedRows);
-      numMergedRows++;
     }
   }
 
@@ -217,11 +212,8 @@ public class SelectionOperatorUtils {
    */
   public static void mergeWithOrdering(PriorityQueue<Object[]> mergedRows, Collection<Object[]> rowsToMerge,
       int maxNumRows) {
-    int numMergedRows = 0;
     for (Object[] row : rowsToMerge) {
       addToPriorityQueue(row, mergedRows, maxNumRows);
-      Tracing.ThreadAccountantOps.sampleAndCheckInterruptionPeriodically(numMergedRows);
-      numMergedRows++;
     }
   }
 
@@ -239,11 +231,11 @@ public class SelectionOperatorUtils {
    * @param dataSchema data schema.
    * @param nullHandlingEnabled whether null handling is enabled.
    * @return data table.
-   * @throws IOException
+   * @throws Exception
    */
   public static DataTable getDataTableFromRows(Collection<Object[]> rows, DataSchema dataSchema,
       boolean nullHandlingEnabled)
-      throws IOException {
+      throws Exception {
     ColumnDataType[] storedColumnDataTypes = dataSchema.getStoredColumnDataTypes();
     int numColumns = storedColumnDataTypes.length;
 
@@ -427,24 +419,6 @@ public class SelectionOperatorUtils {
   }
 
   /**
-   * Extract a selection row from {@link DataTable} with potential null values. (Broker side)
-   *
-   * @param dataTable data table.
-   * @param rowId row id.
-   * @return selection row.
-   */
-  public static Object[] extractRowFromDataTableWithNullHandling(DataTable dataTable, int rowId,
-      RoaringBitmap[] nullBitmaps) {
-    Object[] row = extractRowFromDataTable(dataTable, rowId);
-    for (int colId = 0; colId < nullBitmaps.length; colId++) {
-      if (nullBitmaps[colId] != null && nullBitmaps[colId].contains(rowId)) {
-        row[colId] = null;
-      }
-    }
-    return row;
-  }
-
-  /**
    * Reduces a collection of {@link DataTable}s to selection rows for selection queries without <code>ORDER BY</code>.
    * (Broker side)
    */
@@ -461,11 +435,16 @@ public class SelectionOperatorUtils {
         }
         for (int rowId = 0; rowId < numRows; rowId++) {
           if (rows.size() < limit) {
-            rows.add(extractRowFromDataTableWithNullHandling(dataTable, rowId, nullBitmaps));
+            Object[] row = extractRowFromDataTable(dataTable, rowId);
+            for (int colId = 0; colId < numColumns; colId++) {
+              if (nullBitmaps[colId] != null && nullBitmaps[colId].contains(rowId)) {
+                row[colId] = null;
+              }
+            }
+            rows.add(row);
           } else {
             break;
           }
-          Tracing.ThreadAccountantOps.sampleAndCheckInterruptionPeriodically(rowId);
         }
       } else {
         for (int rowId = 0; rowId < numRows; rowId++) {
@@ -474,7 +453,6 @@ public class SelectionOperatorUtils {
           } else {
             break;
           }
-          Tracing.ThreadAccountantOps.sampleAndCheckInterruptionPeriodically(rowId);
         }
       }
     }
@@ -655,20 +633,5 @@ public class SelectionOperatorUtils {
       queue.poll();
       queue.offer(value);
     }
-  }
-
-  public static DataSchema getSchemaForProjection(DataSchema dataSchema, int[] columnIndices) {
-    int numColumns = columnIndices.length;
-
-    String[] columnNames = dataSchema.getColumnNames();
-    ColumnDataType[] columnDataTypes = dataSchema.getColumnDataTypes();
-    String[] resultColumnNames = new String[numColumns];
-    ColumnDataType[] resultColumnDataTypes = new ColumnDataType[numColumns];
-    for (int i = 0; i < numColumns; i++) {
-      int columnIndex = columnIndices[i];
-      resultColumnNames[i] = columnNames[columnIndex];
-      resultColumnDataTypes[i] = columnDataTypes[columnIndex];
-    }
-    return new DataSchema(resultColumnNames, resultColumnDataTypes);
   }
 }

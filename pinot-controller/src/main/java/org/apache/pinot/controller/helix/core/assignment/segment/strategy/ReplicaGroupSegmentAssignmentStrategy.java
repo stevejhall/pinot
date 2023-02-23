@@ -53,7 +53,7 @@ class ReplicaGroupSegmentAssignmentStrategy implements SegmentAssignmentStrategy
     _tableName = tableConfig.getTableName();
     SegmentsValidationAndRetentionConfig validationAndRetentionConfig = tableConfig.getValidationConfig();
     Preconditions.checkState(validationAndRetentionConfig != null, "Validation Config is null");
-    _replication = tableConfig.getReplication();
+    _replication = validationAndRetentionConfig.getReplicationNumber();
     ReplicaGroupStrategyConfig replicaGroupStrategyConfig =
         validationAndRetentionConfig.getReplicaGroupStrategyConfig();
     _partitionColumn = replicaGroupStrategyConfig != null ? replicaGroupStrategyConfig.getPartitionColumn() : null;

@@ -31,12 +31,6 @@ public interface AggregationResultHolder {
   void setValue(double value);
 
   /**
-   * Set the 'primitive int' aggregation result.
-   * @param value
-   */
-  void setValue(int value);
-
-  /**
    * Set the aggregation result value.
    * @param value
    */
@@ -47,13 +41,6 @@ public interface AggregationResultHolder {
    * @return
    */
   double getDoubleResult();
-
-  /**
-   * Returns the 'primitive int' aggregation result.
-   *
-   * @return
-   */
-  int getIntResult();
 
   /**
    * Returns the result of aggregation.

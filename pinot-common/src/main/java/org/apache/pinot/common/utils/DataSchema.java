@@ -22,7 +22,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import com.google.common.collect.Ordering;
 import it.unimi.dsi.fastutil.doubles.DoubleArrayList;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -84,21 +83,16 @@ public class DataSchema {
     return _columnDataTypes;
   }
 
-  /**
-   * Lazy compute the _storeColumnDataTypes field.
-   */
   @JsonIgnore
   public ColumnDataType[] getStoredColumnDataTypes() {
-    ColumnDataType[] storedColumnDataTypes = _storedColumnDataTypes;
-    if (storedColumnDataTypes == null) {
+    if (_storedColumnDataTypes == null) {
       int numColumns = _columnDataTypes.length;
-      storedColumnDataTypes = new ColumnDataType[numColumns];
+      _storedColumnDataTypes = new ColumnDataType[numColumns];
       for (int i = 0; i < numColumns; i++) {
-        storedColumnDataTypes[i] = _columnDataTypes[i].getStoredType();
+        _storedColumnDataTypes[i] = _columnDataTypes[i].getStoredType();
       }
-      _storedColumnDataTypes = storedColumnDataTypes;
     }
-    return storedColumnDataTypes;
+    return _storedColumnDataTypes;
   }
 
   /**
@@ -132,34 +126,29 @@ public class DataSchema {
    * <code>LONG</code>.
    * <p>NOTE: The given data schema should be type compatible with this one.
    *
-   * @param originalSchema the original Data schema
    * @param anotherDataSchema Data schema to cover
    */
-  public static DataSchema upgradeToCover(DataSchema originalSchema, DataSchema anotherDataSchema) {
-    int numColumns = originalSchema._columnDataTypes.length;
-    ColumnDataType[] columnDataTypes = new ColumnDataType[numColumns];
+  public void upgradeToCover(DataSchema anotherDataSchema) {
+    int numColumns = _columnDataTypes.length;
     for (int i = 0; i < numColumns; i++) {
-      ColumnDataType thisColumnDataType = originalSchema._columnDataTypes[i];
+      ColumnDataType thisColumnDataType = _columnDataTypes[i];
       ColumnDataType thatColumnDataType = anotherDataSchema._columnDataTypes[i];
       if (thisColumnDataType != thatColumnDataType) {
         if (thisColumnDataType.isArray()) {
           if (thisColumnDataType.isWholeNumberArray() && thatColumnDataType.isWholeNumberArray()) {
-            columnDataTypes[i] = ColumnDataType.LONG_ARRAY;
+            _columnDataTypes[i] = ColumnDataType.LONG_ARRAY;
           } else {
-            columnDataTypes[i] = ColumnDataType.DOUBLE_ARRAY;
+            _columnDataTypes[i] = ColumnDataType.DOUBLE_ARRAY;
           }
         } else {
           if (thisColumnDataType.isWholeNumber() && thatColumnDataType.isWholeNumber()) {
-            columnDataTypes[i] = ColumnDataType.LONG;
+            _columnDataTypes[i] = ColumnDataType.LONG;
           } else {
-            columnDataTypes[i] = ColumnDataType.DOUBLE;
+            _columnDataTypes[i] = ColumnDataType.DOUBLE;
           }
         }
-      } else {
-        columnDataTypes[i] = originalSchema._columnDataTypes[i];
       }
     }
-    return new DataSchema(originalSchema._columnNames, columnDataTypes);
   }
 
   public byte[] toBytes()
@@ -257,23 +246,22 @@ public class DataSchema {
     FLOAT(0f),
     DOUBLE(0d),
     BIG_DECIMAL(BigDecimal.ZERO),
-    BOOLEAN(INT, 0),
-    TIMESTAMP(LONG, 0L),
+    BOOLEAN(0) /* Stored as INT */,
+    TIMESTAMP(0L) /* Stored as LONG */,
     STRING(""),
-    JSON(STRING, ""),
+    JSON("") /* Stored as STRING */,
     BYTES(new ByteArray(new byte[0])),
     OBJECT(null),
     INT_ARRAY(new int[0]),
     LONG_ARRAY(new long[0]),
     FLOAT_ARRAY(new float[0]),
     DOUBLE_ARRAY(new double[0]),
-    BOOLEAN_ARRAY(INT_ARRAY, new int[0]),
-    TIMESTAMP_ARRAY(LONG_ARRAY, new long[0]),
+    BOOLEAN_ARRAY(new int[0]) /* Stored as INT_ARRAY */,
+    TIMESTAMP_ARRAY(new long[0]) /* Stored as LONG_ARRAY */,
     STRING_ARRAY(new String[0]),
     BYTES_ARRAY(new byte[0][]);
 
     private static final EnumSet<ColumnDataType> NUMERIC_TYPES = EnumSet.of(INT, LONG, FLOAT, DOUBLE, BIG_DECIMAL);
-    private static final Ordering<ColumnDataType> NUMERIC_TYPE_ORDERING = Ordering.explicit(INT, LONG, FLOAT, DOUBLE);
     private static final EnumSet<ColumnDataType> INTEGRAL_TYPES = EnumSet.of(INT, LONG);
     private static final EnumSet<ColumnDataType> ARRAY_TYPES =
         EnumSet.of(INT_ARRAY, LONG_ARRAY, FLOAT_ARRAY, DOUBLE_ARRAY, STRING_ARRAY, BOOLEAN_ARRAY, TIMESTAMP_ARRAY,
@@ -282,19 +270,10 @@ public class DataSchema {
         EnumSet.of(INT_ARRAY, LONG_ARRAY, FLOAT_ARRAY, DOUBLE_ARRAY);
     private static final EnumSet<ColumnDataType> INTEGRAL_ARRAY_TYPES = EnumSet.of(INT_ARRAY, LONG_ARRAY);
 
-    // stored data type.
-    private final ColumnDataType _storedColumnDataType;
-
     // Placeholder for null. We need a placeholder for null so that it can be serialized in the data table
     private final Object _nullPlaceholder;
 
     ColumnDataType(Object nullPlaceHolder) {
-      _storedColumnDataType = this;
-      _nullPlaceholder = nullPlaceHolder;
-    }
-
-    ColumnDataType(ColumnDataType storedColumnDataType, Object nullPlaceHolder) {
-      _storedColumnDataType = storedColumnDataType;
       _nullPlaceholder = nullPlaceHolder;
     }
 
@@ -306,7 +285,20 @@ public class DataSchema {
      * Returns the data type stored in Pinot.
      */
     public ColumnDataType getStoredType() {
-      return _storedColumnDataType;
+      switch (this) {
+        case BOOLEAN:
+          return INT;
+        case TIMESTAMP:
+          return LONG;
+        case JSON:
+          return STRING;
+        case BOOLEAN_ARRAY:
+          return INT_ARRAY;
+        case TIMESTAMP_ARRAY:
+          return LONG_ARRAY;
+        default:
+          return this;
+      }
     }
 
     public boolean isNumber() {
@@ -333,25 +325,6 @@ public class DataSchema {
       // All numbers are compatible with each other
       return this == anotherColumnDataType || (this.isNumber() && anotherColumnDataType.isNumber()) || (
           this.isNumberArray() && anotherColumnDataType.isNumberArray());
-    }
-
-    /**
-     * Determine if the candidate {@link ColumnDataType} is convertable to this type via the conversion API.
-     *
-     * @param subTypeCandidate candidate column data type to validate.
-     * @return true if it is a sub-type.
-     * @see DataSchema.ColumnDataType#convert(Object)
-     */
-    public boolean isSuperTypeOf(ColumnDataType subTypeCandidate) {
-      if (this.isNumber() && subTypeCandidate.isNumber() && this != BIG_DECIMAL && subTypeCandidate != BIG_DECIMAL) {
-        // NUMBER subtype check using type hoisting rules defined in NUMERIC_TYPE_ORDERING
-        return NUMERIC_TYPE_ORDERING.max(this, subTypeCandidate) == this;
-      } else if (subTypeCandidate == BOOLEAN) {
-        // BOOLEAN type is sub-type of any number type, checking whether it is equal to 1.
-        return this == subTypeCandidate || (this.isNumber() && this != BIG_DECIMAL);
-      } else {
-        return this == subTypeCandidate;
-      }
     }
 
     public DataType toDataType() {
@@ -398,7 +371,7 @@ public class DataSchema {
         case BIG_DECIMAL:
           return (BigDecimal) value;
         case BOOLEAN:
-          return ((Number) value).intValue() == 1;
+          return (Integer) value == 1;
         case TIMESTAMP:
           return new Timestamp((long) value);
         case STRING:
@@ -422,8 +395,6 @@ public class DataSchema {
           return toTimestampArray(value);
         case BYTES_ARRAY:
           return (byte[][]) value;
-        case OBJECT:
-          return (Serializable) value;
         default:
           throw new IllegalStateException(String.format("Cannot convert: '%s' to type: %s", value, this));
       }
@@ -462,7 +433,7 @@ public class DataSchema {
         case BIG_DECIMAL:
           return (BigDecimal) value;
         case BOOLEAN:
-          return ((Number) value).intValue() == 1;
+          return (Integer) value == 1;
         case TIMESTAMP:
           return new Timestamp((long) value).toString();
         case STRING:

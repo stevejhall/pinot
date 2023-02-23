@@ -20,7 +20,6 @@ package org.apache.pinot.perf;
 
 import java.io.IOException;
 import java.nio.ByteOrder;
-import java.util.Arrays;
 import java.util.SplittableRandom;
 import org.apache.pinot.segment.local.io.util.FixedByteValueReaderWriter;
 import org.apache.pinot.segment.spi.memory.PinotDataBuffer;
@@ -46,6 +45,9 @@ public class BenchmarkFixedByteValueReaderWriter {
   @Param({"true", "false"})
   boolean _nativeOrder;
 
+  @Param("42")
+  int _paddingByte;
+
   private PinotDataBuffer _dataBuffer;
   private FixedByteValueReaderWriter _writer;
   byte[] _buffer;
@@ -57,12 +59,11 @@ public class BenchmarkFixedByteValueReaderWriter {
     _writer = new FixedByteValueReaderWriter(_dataBuffer);
     SplittableRandom random = new SplittableRandom(42);
     byte[] bytes = new byte[_length];
-    Arrays.fill(bytes, (byte) 1);
     for (int i = 0; i < _values; i++) {
       int index = random.nextInt(bytes.length);
-      bytes[index] = 0;
+      bytes[index] = (byte) _paddingByte;
       _writer.writeBytes(i, _length, bytes);
-      bytes[index] = 1;
+      bytes[index] = 0;
     }
     _buffer = bytes;
   }
@@ -76,7 +77,7 @@ public class BenchmarkFixedByteValueReaderWriter {
   @Benchmark
   public void readStrings(Blackhole bh) {
     for (int i = 0; i < _values; i++) {
-      bh.consume(_writer.getUnpaddedString(i, _length, _buffer));
+      bh.consume(_writer.getUnpaddedString(i, _length, (byte) _paddingByte, _buffer));
     }
   }
 }

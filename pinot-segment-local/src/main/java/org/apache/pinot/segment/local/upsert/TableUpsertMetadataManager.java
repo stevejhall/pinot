@@ -38,9 +38,4 @@ public interface TableUpsertMetadataManager extends Closeable {
   PartitionUpsertMetadataManager getOrCreatePartitionManager(int partitionId);
 
   UpsertConfig.Mode getUpsertMode();
-
-  /**
-   * Stops the metadata manager. After invoking this method, no access to the metadata will be accepted.
-   */
-  void stop();
 }

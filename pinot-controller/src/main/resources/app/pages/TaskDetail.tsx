@@ -22,10 +22,6 @@ import { get, each } from 'lodash';
 import { Grid, makeStyles } from '@material-ui/core';
 import PinotMethodUtils from '../utils/PinotMethodUtils';
 import CustomizedTables from '../components/Table';
-import { TaskRuntimeConfig } from 'Models';
-import AppLoader from '../components/AppLoader';
-import SimpleAccordion from '../components/SimpleAccordion';
-import CustomCodemirror from '../components/CustomCodemirror';
 
 const useStyles = makeStyles(() => ({
   gridContainer: {
@@ -60,10 +56,6 @@ const useStyles = makeStyles(() => ({
     border: '1px solid #BDCCD9',
     '& .CodeMirror': { height: 532 },
   },
-  runtimeConfigContainer: {
-    '& .CodeMirror': { fontSize: "1rem", height: "100%" },
-    maxHeight: 300
-  }
 }));
 
 const TaskDetail = (props) => {
@@ -73,14 +65,10 @@ const TaskDetail = (props) => {
   const [fetching, setFetching] = useState(true);
   const [taskDebugData, setTaskDebugData] = useState({});
   const [subtaskTableData, setSubtaskTableData] = useState({ columns: ['Task ID', 'Status', 'Start Time', 'Finish Time', 'Minion Host Name'], records: [] });
-  const [taskRuntimeConfig, setTaskRuntimeConfig] = useState<TaskRuntimeConfig | null>(null);
 
   const fetchData = async () => {
     setFetching(true);
-    const [debugRes, runtimeConfig] = await Promise.all([
-      PinotMethodUtils.getTaskDebugData(taskID), 
-      PinotMethodUtils.getTaskRuntimeConfigData(taskID)
-    ]);
+    const debugRes = await PinotMethodUtils.getTaskDebugData(taskID);
     const subtaskTableRecords = [];
     each(get(debugRes, 'data.subtaskInfos', {}), (subTask) => {
       subtaskTableRecords.push([
@@ -95,18 +83,12 @@ const TaskDetail = (props) => {
       return { ...prevState, records: subtaskTableRecords };
     });
     setTaskDebugData(debugRes.data);
-    setTaskRuntimeConfig(runtimeConfig)
-
     setFetching(false);
   };
 
   useEffect(() => {
     fetchData();
   }, []);
-
-  if(fetching) {
-    return <AppLoader />
-  }
 
   return (
     <Grid item xs className={classes.gridContainer}>
@@ -122,7 +104,7 @@ const TaskDetail = (props) => {
             <strong>Start Time:</strong> {get(taskDebugData, 'startTime', '')}
           </Grid>
           <Grid item xs={12}>
-            <strong>Finish Time:</strong> {get(taskDebugData, 'finishTime', '')}
+            <strong>Finish Time:</strong> {get(taskDebugData, 'subtaskInfos.0.finishTime', '')}
           </Grid>
           <Grid item xs={12}>
             <strong>Number of Sub Tasks:</strong> {get(taskDebugData, 'subtaskCount.total', '')}
@@ -130,29 +112,17 @@ const TaskDetail = (props) => {
         </Grid>
       </div>
       <Grid container spacing={2}>
-        {/* Runtime config - JSON */}
         <Grid item xs={12}>
-          <SimpleAccordion
-            headerTitle="Runtime Config"
-            showSearchBox={false}
-            detailsContainerClass={classes.runtimeConfigContainer}
-          >
-            <CustomCodemirror
-              data={taskRuntimeConfig}
+          {!fetching && (
+            <CustomizedTables
+              title="Sub Tasks"
+              data={subtaskTableData}
+              showSearchBox={true}
+              inAccordionFormat={true}
+              addLinks
+              baseURL={`/task-queue/${taskType}/tables/${queueTableName}/task/${taskID}/sub-task/`}
             />
-          </SimpleAccordion>
-        </Grid>
-      
-        {/* Sub task table */}
-        <Grid item xs={12}>
-          <CustomizedTables
-            title="Sub Tasks"
-            data={subtaskTableData}
-            showSearchBox={true}
-            inAccordionFormat={true}
-            addLinks
-            baseURL={`/task-queue/${taskType}/tables/${queueTableName}/task/${taskID}/sub-task/`}
-          />
+          )}
         </Grid>
       </Grid>
     </Grid>

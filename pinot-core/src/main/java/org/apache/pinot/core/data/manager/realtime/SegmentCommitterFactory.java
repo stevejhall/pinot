@@ -24,8 +24,6 @@ import org.apache.pinot.common.protocols.SegmentCompletionProtocol;
 import org.apache.pinot.segment.local.segment.index.loader.IndexLoadingConfig;
 import org.apache.pinot.server.realtime.ServerSegmentCompletionProtocolHandler;
 import org.apache.pinot.spi.config.table.TableConfig;
-import org.apache.pinot.spi.stream.StreamConfig;
-import org.apache.pinot.spi.utils.IngestionConfigUtils;
 import org.slf4j.Logger;
 
 
@@ -36,7 +34,6 @@ public class SegmentCommitterFactory {
   private static Logger _logger;
   private final ServerSegmentCompletionProtocolHandler _protocolHandler;
   private final TableConfig _tableConfig;
-  private final StreamConfig _streamConfig;
   private final ServerMetrics _serverMetrics;
   private final IndexLoadingConfig _indexLoadingConfig;
 
@@ -45,20 +42,10 @@ public class SegmentCommitterFactory {
     _logger = segmentLogger;
     _protocolHandler = protocolHandler;
     _tableConfig = tableConfig;
-    _streamConfig = new StreamConfig(_tableConfig.getTableName(),
-        IngestionConfigUtils.getStreamConfigMap(_tableConfig));
     _indexLoadingConfig = indexLoadingConfig;
     _serverMetrics = serverMetrics;
   }
 
-  /**
-   *
-   * @param isSplitCommit Indicates if the controller has enabled split commit
-   * @param params Parameters to use in the Segment completion request
-   * @param controllerVipUrl Unused,
-   * @return
-   * @throws URISyntaxException
-   */
   public SegmentCommitter createSegmentCommitter(boolean isSplitCommit, SegmentCompletionProtocol.Request.Params params,
       String controllerVipUrl)
       throws URISyntaxException {
@@ -66,23 +53,18 @@ public class SegmentCommitterFactory {
       return new DefaultSegmentCommitter(_logger, _protocolHandler, params);
     }
     SegmentUploader segmentUploader;
-
-    boolean uploadToFs = _streamConfig.isServerUploadToDeepStore();
-    String peerSegmentDownloadScheme = _tableConfig.getValidationConfig().getPeerSegmentDownloadScheme();
-    String segmentStoreUri = _indexLoadingConfig.getSegmentStoreURI();
-
-    if (uploadToFs || peerSegmentDownloadScheme != null) {
-      // TODO: peer scheme non-null check exists for backwards compatibility. remove check once users have migrated
-      segmentUploader = new PinotFSSegmentUploader(segmentStoreUri,
+    // TODO Instead of using a peer segment download scheme to control how the servers do split commit, we should use
+    // other configs such as server or controller configs or controller responses to the servers.
+    if (_tableConfig.getValidationConfig().getPeerSegmentDownloadScheme() != null) {
+      segmentUploader = new PinotFSSegmentUploader(_indexLoadingConfig.getSegmentStoreURI(),
           PinotFSSegmentUploader.DEFAULT_SEGMENT_UPLOAD_TIMEOUT_MILLIS);
-    } else {
-      segmentUploader = new Server2ControllerSegmentUploader(_logger,
-          _protocolHandler.getFileUploadDownloadClient(),
-          _protocolHandler.getSegmentCommitUploadURL(params, controllerVipUrl), params.getSegmentName(),
-          ServerSegmentCompletionProtocolHandler.getSegmentUploadRequestTimeoutMs(), _serverMetrics,
-          _protocolHandler.getAuthProvider());
+      return new PeerSchemeSplitSegmentCommitter(_logger, _protocolHandler, params, segmentUploader);
     }
 
-    return new SplitSegmentCommitter(_logger, _protocolHandler, params, segmentUploader, peerSegmentDownloadScheme);
+    segmentUploader = new Server2ControllerSegmentUploader(_logger, _protocolHandler.getFileUploadDownloadClient(),
+        _protocolHandler.getSegmentCommitUploadURL(params, controllerVipUrl), params.getSegmentName(),
+        ServerSegmentCompletionProtocolHandler.getSegmentUploadRequestTimeoutMs(), _serverMetrics,
+        _protocolHandler.getAuthProvider());
+    return new SplitSegmentCommitter(_logger, _protocolHandler, params, segmentUploader);
   }
 }

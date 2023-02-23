@@ -34,12 +34,10 @@ public class BooleanUtils {
   }
 
   public static boolean toBoolean(Object booleanObject) {
-    if (booleanObject == null) {
-      return false;
-    } else if (booleanObject instanceof String) {
+    if (booleanObject instanceof String) {
       return BooleanUtils.toBoolean((String) booleanObject);
     } else if (booleanObject instanceof Number) {
-      return ((Number) booleanObject).intValue() == 1;
+      return ((Number) booleanObject).intValue() != 0;
     } else if (booleanObject instanceof Boolean) {
       return (boolean) booleanObject;
     } else {

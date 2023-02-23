@@ -18,44 +18,35 @@
  */
 package org.apache.pinot.plugin.metrics.dropwizard;
 
+import com.codahale.metrics.Gauge;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import org.apache.pinot.spi.metrics.PinotGauge;
+
 
 public class DropwizardGauge<T> implements PinotGauge<T> {
 
-  private final DropwizardSettableGauge<T> _settableGauge;
+  private final Gauge<T> _gauge;
 
-  public DropwizardGauge(DropwizardSettableGauge<T> settableGauge) {
-    _settableGauge = settableGauge;
+  public DropwizardGauge(Gauge<T> gauge) {
+    _gauge = gauge;
   }
 
   public DropwizardGauge(Function<Void, T> condition) {
-    this(new DropwizardSettableGauge<>(() -> condition.apply(null)));
+    this(() -> condition.apply(null));
   }
 
   @Override
   public Object getGauge() {
-    return _settableGauge;
+    return _gauge;
   }
 
   @Override
   public Object getMetric() {
-    return _settableGauge;
+    return _gauge;
   }
 
   @Override
   public T value() {
-    return _settableGauge.getValue();
-  }
-
-  @Override
-  public void setValue(T value) {
-    _settableGauge.setValue(value);
-  }
-
-  @Override
-  public void setValueSupplier(Supplier<T> valueSupplier) {
-    _settableGauge.setValueSupplier(valueSupplier);
+    return _gauge.getValue();
   }
 }

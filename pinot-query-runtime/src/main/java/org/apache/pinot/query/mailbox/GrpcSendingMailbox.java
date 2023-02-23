@@ -18,91 +18,63 @@
  */
 package org.apache.pinot.query.mailbox;
 
-import com.google.protobuf.ByteString;
-import io.grpc.stub.StreamObserver;
-import java.io.IOException;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import io.grpc.ManagedChannel;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.apache.pinot.common.datablock.DataBlock;
-import org.apache.pinot.common.datablock.MetadataBlock;
-import org.apache.pinot.common.proto.Mailbox;
 import org.apache.pinot.common.proto.Mailbox.MailboxContent;
+import org.apache.pinot.common.proto.PinotMailboxGrpc;
 import org.apache.pinot.query.mailbox.channel.ChannelUtils;
-import org.apache.pinot.query.runtime.blocks.TransferableBlock;
-
+import org.apache.pinot.query.mailbox.channel.MailboxStatusStreamObserver;
 
 /**
  * GRPC implementation of the {@link SendingMailbox}.
  */
-public class GrpcSendingMailbox implements SendingMailbox<TransferableBlock> {
+public class GrpcSendingMailbox implements SendingMailbox<MailboxContent> {
+  private final GrpcMailboxService _mailboxService;
   private final String _mailboxId;
   private final AtomicBoolean _initialized = new AtomicBoolean(false);
   private final AtomicInteger _totalMsgSent = new AtomicInteger(0);
 
-  private final CountDownLatch _finishLatch;
-  private final StreamObserver<MailboxContent> _mailboxContentStreamObserver;
+  private MailboxStatusStreamObserver _statusStreamObserver;
 
-  public GrpcSendingMailbox(String mailboxId, StreamObserver<MailboxContent> mailboxContentStreamObserver,
-      CountDownLatch latch) {
+  public GrpcSendingMailbox(String mailboxId, GrpcMailboxService mailboxService) {
+    _mailboxService = mailboxService;
     _mailboxId = mailboxId;
-    _mailboxContentStreamObserver = mailboxContentStreamObserver;
-    _finishLatch = latch;
     _initialized.set(false);
   }
 
+  public void init()
+      throws UnsupportedOperationException {
+    ManagedChannel channel = _mailboxService.getChannel(_mailboxId);
+    PinotMailboxGrpc.PinotMailboxStub stub = PinotMailboxGrpc.newStub(channel);
+    _statusStreamObserver = new MailboxStatusStreamObserver();
+    _statusStreamObserver.init(stub.open(_statusStreamObserver));
+    // send a begin-of-stream message.
+    _statusStreamObserver.send(MailboxContent.newBuilder()
+        .setMailboxId(_mailboxId)
+        .putMetadata(ChannelUtils.MAILBOX_METADATA_BEGIN_OF_STREAM_KEY, "true")
+        .build());
+    _initialized.set(true);
+  }
+
   @Override
-  public void send(TransferableBlock block)
+  public void send(MailboxContent data)
       throws UnsupportedOperationException {
     if (!_initialized.get()) {
       // initialization is special
-      open();
+      init();
     }
-    MailboxContent data = toMailboxContent(block.getDataBlock());
-    _mailboxContentStreamObserver.onNext(data);
+    _statusStreamObserver.send(data);
     _totalMsgSent.incrementAndGet();
   }
 
   @Override
   public void complete() {
-    _mailboxContentStreamObserver.onCompleted();
-  }
-
-  @Override
-  public void open() {
-    // TODO: Get rid of init call.
-    // send a begin-of-stream message.
-    _mailboxContentStreamObserver.onNext(MailboxContent.newBuilder().setMailboxId(_mailboxId)
-        .putMetadata(ChannelUtils.MAILBOX_METADATA_BEGIN_OF_STREAM_KEY, "true").build());
-    _initialized.set(true);
+    _statusStreamObserver.complete();
   }
 
   @Override
   public String getMailboxId() {
     return _mailboxId;
-  }
-
-  @Override
-  public void waitForFinish(long timeout, TimeUnit unit)
-      throws InterruptedException {
-    _finishLatch.await(timeout, unit);
-  }
-
-  @Override
-  public void cancel(Throwable t) {
-  }
-
-  private MailboxContent toMailboxContent(DataBlock dataBlock) {
-    try {
-      Mailbox.MailboxContent.Builder builder = Mailbox.MailboxContent.newBuilder().setMailboxId(_mailboxId)
-          .setPayload(ByteString.copyFrom(dataBlock.toBytes()));
-      if (dataBlock instanceof MetadataBlock) {
-        builder.putMetadata(ChannelUtils.MAILBOX_METADATA_END_OF_STREAM_KEY, "true");
-      }
-      return builder.build();
-    } catch (IOException e) {
-      throw new RuntimeException("Error converting to mailbox content", e);
-    }
   }
 }

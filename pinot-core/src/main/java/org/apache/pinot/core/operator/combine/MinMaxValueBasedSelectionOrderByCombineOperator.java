@@ -55,8 +55,7 @@ import org.slf4j.LoggerFactory;
  * </ul>
  */
 @SuppressWarnings({"rawtypes", "unchecked"})
-public class MinMaxValueBasedSelectionOrderByCombineOperator
-    extends BaseSingleBlockCombineOperator<SelectionResultsBlock> {
+public class MinMaxValueBasedSelectionOrderByCombineOperator extends BaseCombineOperator<SelectionResultsBlock> {
   private static final Logger LOGGER = LoggerFactory.getLogger(MinMaxValueBasedSelectionOrderByCombineOperator.class);
 
   private static final String EXPLAIN_NAME = "COMBINE_SELECT_ORDERBY_MINMAX";
@@ -73,9 +72,9 @@ public class MinMaxValueBasedSelectionOrderByCombineOperator
   private final List<MinMaxValueContext> _minMaxValueContexts;
   private final AtomicReference<Comparable> _globalBoundaryValue = new AtomicReference<>();
 
-  public MinMaxValueBasedSelectionOrderByCombineOperator(List<Operator> operators, QueryContext queryContext,
+  MinMaxValueBasedSelectionOrderByCombineOperator(List<Operator> operators, QueryContext queryContext,
       ExecutorService executorService) {
-    super(null, operators, queryContext, executorService);
+    super(operators, queryContext, executorService);
     _endOperatorId = new AtomicInteger(_numOperators);
     _numRowsToKeep = queryContext.getLimit() + queryContext.getOffset();
 
@@ -212,21 +211,11 @@ public class MinMaxValueBasedSelectionOrderByCombineOperator
           ((AcquireReleaseColumnsSegmentOperator) operator).release();
         }
       }
-      Collection<Object[]> rows = resultsBlock.getRows();
-      if (rows != null && rows.size() >= _numRowsToKeep) {
+      PriorityQueue<Object[]> selectionResult = (PriorityQueue<Object[]>) resultsBlock.getRows();
+      if (selectionResult != null && selectionResult.size() == _numRowsToKeep) {
         // Segment result has enough rows, update the boundary value
-
-        Comparable segmentBoundaryValue;
-        if (rows instanceof PriorityQueue) {
-          // Results from SelectionOrderByOperator
-          assert ((PriorityQueue<Object[]>) rows).peek() != null;
-          segmentBoundaryValue = (Comparable) ((PriorityQueue<Object[]>) rows).peek()[0];
-        } else {
-          // Results from LinearSelectionOrderByOperator
-          assert rows instanceof List;
-          segmentBoundaryValue = (Comparable) ((List<Object[]>) rows).get(rows.size() - 1)[0];
-        }
-
+        assert selectionResult.peek() != null;
+        Comparable segmentBoundaryValue = (Comparable) selectionResult.peek()[0];
         if (boundaryValue == null) {
           boundaryValue = segmentBoundaryValue;
         } else {
@@ -285,14 +274,14 @@ public class MinMaxValueBasedSelectionOrderByCombineOperator
         return blockToMerge;
       }
       if (mergedBlock == null) {
-        mergedBlock = convertToMergeableBlock((SelectionResultsBlock) blockToMerge);
+        mergedBlock = (SelectionResultsBlock) blockToMerge;
       } else {
         mergeResultsBlocks(mergedBlock, (SelectionResultsBlock) blockToMerge);
       }
       numBlocksMerged++;
 
       // Update the boundary value if enough rows are collected
-      PriorityQueue<Object[]> selectionResult = mergedBlock.getRowsAsPriorityQueue();
+      PriorityQueue<Object[]> selectionResult = (PriorityQueue<Object[]>) mergedBlock.getRows();
       if (selectionResult != null && selectionResult.size() == _numRowsToKeep) {
         assert selectionResult.peek() != null;
         _globalBoundaryValue.set((Comparable) selectionResult.peek()[0]);
@@ -301,6 +290,7 @@ public class MinMaxValueBasedSelectionOrderByCombineOperator
     return mergedBlock;
   }
 
+  @Override
   protected void mergeResultsBlocks(SelectionResultsBlock mergedBlock, SelectionResultsBlock blockToMerge) {
     DataSchema mergedDataSchema = mergedBlock.getDataSchema();
     DataSchema dataSchemaToMerge = blockToMerge.getDataSchema();
@@ -316,16 +306,10 @@ public class MinMaxValueBasedSelectionOrderByCombineOperator
       return;
     }
 
-    PriorityQueue<Object[]> mergedRows = mergedBlock.getRowsAsPriorityQueue();
+    PriorityQueue<Object[]> mergedRows = (PriorityQueue<Object[]>) mergedBlock.getRows();
     Collection<Object[]> rowsToMerge = blockToMerge.getRows();
     assert mergedRows != null && rowsToMerge != null;
     SelectionOperatorUtils.mergeWithOrdering(mergedRows, rowsToMerge, _numRowsToKeep);
-  }
-
-  protected SelectionResultsBlock convertToMergeableBlock(SelectionResultsBlock resultsBlock) {
-    // This may create a copy or return the same instance. Anyway, this operator is the owner of the
-    // value now, so it can mutate it.
-    return resultsBlock.convertToPriorityQueueBased();
   }
 
   private static class MinMaxValueContext {

@@ -41,15 +41,20 @@ public interface ValueReader extends Closeable {
   }
 
   /**
-   * Returns un-padded bytes for string.
+   * Get un-padded bytes for string.
    * NOTE: The passed in reusable buffer should have capacity of at least {@code numBytesPerValue}.
+   * @param index
+   * @param numBytesPerValue
+   * @param paddingByte
+   * @param buffer
+   * @return
    */
-  byte[] getUnpaddedBytes(int index, int numBytesPerValue, byte[] buffer);
+  byte[] getUnpaddedBytes(int index, int numBytesPerValue, byte paddingByte, byte[] buffer);
 
   /**
    * NOTE: The passed in reusable buffer should have capacity of at least {@code numBytesPerValue}.
    */
-  String getUnpaddedString(int index, int numBytesPerValue, byte[] buffer);
+  String getUnpaddedString(int index, int numBytesPerValue, byte paddingByte, byte[] buffer);
 
   /**
    * NOTE: The passed in reusable buffer should have capacity of at least {@code numBytesPerValue}.
@@ -60,14 +65,4 @@ public interface ValueReader extends Closeable {
    * NOTE: Do not reuse buffer for BYTES because the return value can have variable length.
    */
   byte[] getBytes(int index, int numBytesPerValue);
-
-  /**
-   * Returns the comparison result of the UTF-8 decoded values.
-   */
-  int compareUtf8Bytes(int index, int numBytesPerValue, byte[] bytes);
-
-  /**
-   * Returns the comparison result of the bytes values.
-   */
-  int compareBytes(int index, int numBytesPerValue, byte[] bytes);
 }

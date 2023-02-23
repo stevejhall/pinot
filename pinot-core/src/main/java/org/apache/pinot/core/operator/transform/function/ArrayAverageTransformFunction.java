@@ -36,6 +36,7 @@ import org.apache.pinot.segment.spi.datasource.DataSource;
 public class ArrayAverageTransformFunction extends BaseTransformFunction {
   public static final String FUNCTION_NAME = "arrayAverage";
 
+  private double[] _results;
   private TransformFunction _argument;
 
   @Override
@@ -70,9 +71,11 @@ public class ArrayAverageTransformFunction extends BaseTransformFunction {
   @Override
   public double[] transformToDoubleValuesSV(ProjectionBlock projectionBlock) {
     int length = projectionBlock.getNumDocs();
-    if (_doubleValuesSV == null) {
-      _doubleValuesSV = new double[length];
+
+    if (_results == null || _results.length < length) {
+      _results = new double[length];
     }
+
     switch (_argument.getResultMetadata().getDataType().getStoredType()) {
       case INT:
         int[][] intValuesMV = _argument.transformToIntValuesMV(projectionBlock);
@@ -81,7 +84,7 @@ public class ArrayAverageTransformFunction extends BaseTransformFunction {
           for (int value : intValuesMV[i]) {
             sumRes += value;
           }
-          _doubleValuesSV[i] = sumRes / intValuesMV[i].length;
+          _results[i] = sumRes / intValuesMV[i].length;
         }
         break;
       case LONG:
@@ -91,7 +94,7 @@ public class ArrayAverageTransformFunction extends BaseTransformFunction {
           for (long value : longValuesMV[i]) {
             sumRes += value;
           }
-          _doubleValuesSV[i] = sumRes / longValuesMV[i].length;
+          _results[i] = sumRes / longValuesMV[i].length;
         }
         break;
       case FLOAT:
@@ -101,7 +104,7 @@ public class ArrayAverageTransformFunction extends BaseTransformFunction {
           for (float value : floatValuesMV[i]) {
             sumRes += value;
           }
-          _doubleValuesSV[i] = sumRes / floatValuesMV[i].length;
+          _results[i] = sumRes / floatValuesMV[i].length;
         }
         break;
       case DOUBLE:
@@ -111,12 +114,12 @@ public class ArrayAverageTransformFunction extends BaseTransformFunction {
           for (double value : doubleValuesMV[i]) {
             sumRes += value;
           }
-          _doubleValuesSV[i] = sumRes / doubleValuesMV[i].length;
+          _results[i] = sumRes / doubleValuesMV[i].length;
         }
         break;
       default:
         throw new IllegalStateException();
     }
-    return _doubleValuesSV;
+    return _results;
   }
 }

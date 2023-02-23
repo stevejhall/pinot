@@ -106,7 +106,7 @@ public class InstanceAssignmentConfigUtils {
 
     InstanceReplicaGroupPartitionConfig replicaGroupPartitionConfig;
     SegmentsValidationAndRetentionConfig segmentConfig = tableConfig.getValidationConfig();
-    int numReplicaGroups = tableConfig.getReplication();
+    int numReplicaGroups = segmentConfig.getReplicationNumber();
     ReplicaGroupStrategyConfig replicaGroupStrategyConfig = segmentConfig.getReplicaGroupStrategyConfig();
     Preconditions.checkState(replicaGroupStrategyConfig != null, "Failed to find the replica-group strategy config");
     String partitionColumn = replicaGroupStrategyConfig.getPartitionColumn();

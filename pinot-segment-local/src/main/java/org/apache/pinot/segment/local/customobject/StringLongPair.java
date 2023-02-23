@@ -20,8 +20,6 @@ package org.apache.pinot.segment.local.customobject;
 
 import java.nio.ByteBuffer;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
 
 public class StringLongPair extends ValueLongPair<String> {
 
@@ -34,17 +32,18 @@ public class StringLongPair extends ValueLongPair<String> {
   }
 
   public static StringLongPair fromByteBuffer(ByteBuffer byteBuffer) {
-    byte[] stringBytes = new byte[byteBuffer.getInt()];
-    byteBuffer.get(stringBytes);
-    return new StringLongPair(new String(stringBytes, UTF_8), byteBuffer.getLong());
+    int len = byteBuffer.getInt();
+    byte[] bytes = new byte[len];
+    byteBuffer.get(bytes);
+    return new StringLongPair(new String(bytes), byteBuffer.getLong());
   }
 
   @Override
   public byte[] toBytes() {
-    byte[] stringBytes = _value.getBytes(UTF_8);
-    ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES + stringBytes.length + Long.BYTES);
-    byteBuffer.putInt(stringBytes.length);
-    byteBuffer.put(stringBytes);
+    int len = _value.length();
+    ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES + len + Long.BYTES);
+    byteBuffer.putInt(len);
+    byteBuffer.put(_value.getBytes());
     byteBuffer.putLong(_time);
     return byteBuffer.array();
   }

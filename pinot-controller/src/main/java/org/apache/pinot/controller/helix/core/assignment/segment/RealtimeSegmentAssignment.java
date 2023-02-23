@@ -31,6 +31,7 @@ import org.apache.pinot.common.assignment.InstancePartitions;
 import org.apache.pinot.common.tier.Tier;
 import org.apache.pinot.controller.helix.core.assignment.segment.strategy.SegmentAssignmentStrategy;
 import org.apache.pinot.controller.helix.core.assignment.segment.strategy.SegmentAssignmentStrategyFactory;
+import org.apache.pinot.spi.config.table.TableConfig;
 import org.apache.pinot.spi.config.table.assignment.InstancePartitionsType;
 import org.apache.pinot.spi.utils.CommonConstants.Helix.StateModel.SegmentStateModel;
 import org.apache.pinot.spi.utils.RebalanceConfigConstants;
@@ -72,6 +73,11 @@ import org.apache.pinot.spi.utils.RebalanceConfigConstants;
  * </ul>
  */
 public class RealtimeSegmentAssignment extends BaseSegmentAssignment {
+
+  @Override
+  protected int getReplication(TableConfig tableConfig) {
+    return tableConfig.getValidationConfig().getReplicasPerPartitionNumber();
+  }
 
   @Override
   public List<String> assignSegment(String segmentName, Map<String, Map<String, String>> currentAssignment,
@@ -180,9 +186,19 @@ public class RealtimeSegmentAssignment extends BaseSegmentAssignment {
     boolean bootstrap =
         config.getBoolean(RebalanceConfigConstants.BOOTSTRAP, RebalanceConfigConstants.DEFAULT_BOOTSTRAP);
 
+    // TODO: remove this check after we also refactor consuming segments assignment strategy
+    // See https://github.com/apache/pinot/issues/9047
+    SegmentAssignmentStrategy segmentAssignmentStrategy = null;
+    if (completedInstancePartitions != null) {
+      // Gets Segment assignment strategy for instance partitions
+      segmentAssignmentStrategy = SegmentAssignmentStrategyFactory
+          .getSegmentAssignmentStrategy(_helixManager, _tableConfig, InstancePartitionsType.COMPLETED.toString(),
+              completedInstancePartitions);
+    }
+
     // Rebalance tiers first
     Pair<List<Map<String, Map<String, String>>>, Map<String, Map<String, String>>> pair =
-        rebalanceTiers(currentAssignment, sortedTiers, tierInstancePartitionsMap, bootstrap,
+        rebalanceTiers(currentAssignment, sortedTiers, tierInstancePartitionsMap, bootstrap, segmentAssignmentStrategy,
             InstancePartitionsType.COMPLETED);
 
     List<Map<String, Map<String, String>>> newTierAssignments = pair.getLeft();
@@ -202,11 +218,8 @@ public class RealtimeSegmentAssignment extends BaseSegmentAssignment {
     if (completedInstancePartitions != null) {
       // When COMPLETED instance partitions are provided, reassign COMPLETED segments in a balanced way (relocate
       // COMPLETED segments to offload them from CONSUMING instances to COMPLETED instances)
-      SegmentAssignmentStrategy segmentAssignmentStrategy =
-          SegmentAssignmentStrategyFactory.getSegmentAssignmentStrategy(_helixManager, _tableConfig,
-              InstancePartitionsType.COMPLETED.toString(), completedInstancePartitions);
-      _logger.info("Reassigning COMPLETED segments with COMPLETED instance partitions for table: {}",
-          _tableNameWithType);
+      _logger
+          .info("Reassigning COMPLETED segments with COMPLETED instance partitions for table: {}", _tableNameWithType);
       newAssignment = reassignSegments(InstancePartitionsType.COMPLETED.toString(), completedSegmentAssignment,
           completedInstancePartitions, bootstrap, segmentAssignmentStrategy, InstancePartitionsType.COMPLETED);
     } else {

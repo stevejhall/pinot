@@ -21,15 +21,13 @@ package org.apache.pinot.query.runtime.plan.serde;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.pinot.common.proto.Worker;
 import org.apache.pinot.core.routing.TimeBoundaryInfo;
 import org.apache.pinot.core.transport.ServerInstance;
 import org.apache.pinot.query.planner.StageMetadata;
 import org.apache.pinot.query.planner.stage.AbstractStageNode;
 import org.apache.pinot.query.planner.stage.StageNodeSerDeUtils;
-import org.apache.pinot.query.routing.VirtualServer;
 import org.apache.pinot.query.routing.WorkerInstance;
 import org.apache.pinot.query.runtime.plan.DistributedStagePlan;
 
@@ -45,7 +43,7 @@ public class QueryPlanSerDeUtils {
 
   public static DistributedStagePlan deserialize(Worker.StagePlan stagePlan) {
     DistributedStagePlan distributedStagePlan = new DistributedStagePlan(stagePlan.getStageId());
-    distributedStagePlan.setServer(stringToInstance(stagePlan.getInstanceId()));
+    distributedStagePlan.setServerInstance(stringToInstance(stagePlan.getInstanceId()));
     distributedStagePlan.setStageRoot(StageNodeSerDeUtils.deserializeStageNode(stagePlan.getStageRoot()));
     Map<Integer, Worker.StageMetadata> metadataMap = stagePlan.getStageMetadataMap();
     distributedStagePlan.getMetadataMap().putAll(protoMapToStageMetadataMap(metadataMap));
@@ -55,31 +53,21 @@ public class QueryPlanSerDeUtils {
   public static Worker.StagePlan serialize(DistributedStagePlan distributedStagePlan) {
     return Worker.StagePlan.newBuilder()
         .setStageId(distributedStagePlan.getStageId())
-        .setInstanceId(instanceToString(distributedStagePlan.getServer()))
+        .setInstanceId(instanceToString(distributedStagePlan.getServerInstance()))
         .setStageRoot(StageNodeSerDeUtils.serializeStageNode((AbstractStageNode) distributedStagePlan.getStageRoot()))
         .putAllStageMetadata(stageMetadataMapToProtoMap(distributedStagePlan.getMetadataMap())).build();
   }
 
-  private static final Pattern VIRTUAL_SERVER_PATTERN = Pattern.compile(
-      "(?<virtualid>[0-9]+)@(?<host>[^:]+):(?<port>[0-9]+)\\((?<grpc>[0-9]+):(?<service>[0-9]+):(?<mailbox>[0-9]+)\\)");
-
-  public static VirtualServer stringToInstance(String serverInstanceString) {
-    Matcher matcher = VIRTUAL_SERVER_PATTERN.matcher(serverInstanceString);
-    if (!matcher.matches()) {
-      throw new IllegalArgumentException("Unexpected serverInstanceString '" + serverInstanceString + "'. This might "
-          + "happen if you are upgrading from an old version of the multistage engine to the current one in a rolling "
-          + "fashion.");
-    }
-
+  public static ServerInstance stringToInstance(String serverInstanceString) {
+    String[] s = StringUtils.split(serverInstanceString, '_');
     // Skipped netty and grpc port as they are not used in worker instance.
-    return new VirtualServer(new WorkerInstance(matcher.group("host"), Integer.parseInt(matcher.group("port")),
-        Integer.parseInt(matcher.group("grpc")), Integer.parseInt(matcher.group("service")),
-        Integer.parseInt(matcher.group("mailbox"))), Integer.parseInt(matcher.group("virtualid")));
+    return new WorkerInstance(s[0], Integer.parseInt(s[1]), Integer.parseInt(s[2]), Integer.parseInt(s[3]),
+        Integer.parseInt(s[4]));
   }
 
-  public static String instanceToString(VirtualServer serverInstance) {
-    return String.format("%s@%s:%s(%s:%s:%s)", serverInstance.getVirtualId(), serverInstance.getHostname(),
-        serverInstance.getPort(), serverInstance.getGrpcPort(), serverInstance.getQueryServicePort(),
+  public static String instanceToString(ServerInstance serverInstance) {
+    return StringUtils.join(serverInstance.getHostname(), '_', serverInstance.getPort(), '_',
+        serverInstance.getGrpcPort(), '_', serverInstance.getQueryServicePort(), '_',
         serverInstance.getQueryMailboxPort());
   }
 
@@ -106,8 +94,7 @@ public class QueryPlanSerDeUtils {
           : instanceEntry.getValue().getTableTypeToSegmentListMap().entrySet()) {
         tableToSegmentMap.put(tableEntry.getKey(), tableEntry.getValue().getSegmentsList());
       }
-      stageMetadata.getServerInstanceToSegmentsMap()
-          .put(stringToInstance(instanceEntry.getKey()).getServer(), tableToSegmentMap);
+      stageMetadata.getServerInstanceToSegmentsMap().put(stringToInstance(instanceEntry.getKey()), tableToSegmentMap);
     }
     // time boundary info
     if (!workerStageMetadata.getTimeColumn().isEmpty()) {
@@ -130,7 +117,7 @@ public class QueryPlanSerDeUtils {
     // scanned table
     builder.addAllDataSources(stageMetadata.getScannedTables());
     // server instance to table-segments mapping
-    for (VirtualServer serverInstance : stageMetadata.getServerInstances()) {
+    for (ServerInstance serverInstance : stageMetadata.getServerInstances()) {
       builder.addInstances(instanceToString(serverInstance));
     }
     for (Map.Entry<ServerInstance, Map<String, List<String>>> instanceEntry
@@ -140,7 +127,7 @@ public class QueryPlanSerDeUtils {
         tableToSegmentMap.put(tableEntry.getKey(),
             Worker.SegmentList.newBuilder().addAllSegments(tableEntry.getValue()).build());
       }
-      builder.putInstanceToSegmentMap(instanceToString(new VirtualServer(instanceEntry.getKey(), 0)),
+      builder.putInstanceToSegmentMap(instanceToString(instanceEntry.getKey()),
           Worker.SegmentMap.newBuilder().putAllTableTypeToSegmentList(tableToSegmentMap).build());
     }
     // time boundary info

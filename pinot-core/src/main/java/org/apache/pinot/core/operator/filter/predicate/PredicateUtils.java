@@ -18,21 +18,16 @@
  */
 package org.apache.pinot.core.operator.filter.predicate;
 
-import com.google.common.base.Equivalence;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.ints.IntSet;
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
-import javax.annotation.Nullable;
 import org.apache.pinot.common.request.context.predicate.BaseInPredicate;
 import org.apache.pinot.common.utils.HashUtil;
-import org.apache.pinot.core.query.request.context.QueryContext;
 import org.apache.pinot.segment.spi.index.reader.Dictionary;
 import org.apache.pinot.spi.data.FieldSpec.DataType;
 import org.apache.pinot.spi.utils.BooleanUtils;
 import org.apache.pinot.spi.utils.ByteArray;
-import org.apache.pinot.spi.utils.CommonConstants;
 import org.apache.pinot.spi.utils.TimestampUtils;
 
 
@@ -75,8 +70,7 @@ public class PredicateUtils {
   /**
    * Returns a dictionary id set of the values in the given IN/NOT_IN predicate.
    */
-  public static IntSet getDictIdSet(BaseInPredicate inPredicate, Dictionary dictionary, DataType dataType,
-      @Nullable QueryContext queryContext) {
+  public static IntSet getDictIdSet(BaseInPredicate inPredicate, Dictionary dictionary, DataType dataType) {
     List<String> values = inPredicate.getValues();
     int hashSetSize = Integer.min(HashUtil.getMinHashSetSize(values.size()), MAX_INITIAL_DICT_ID_SET_SIZE);
     IntSet dictIdSet = new IntOpenHashSet(hashSetSize);
@@ -145,23 +139,11 @@ public class PredicateUtils {
         }
         break;
       case STRING:
-        if (queryContext == null || values.size() <= Integer.parseInt(queryContext.getQueryOptions()
-            .getOrDefault(CommonConstants.Broker.Request.QueryOptionKey.IN_PREDICATE_SORT_THRESHOLD,
-                CommonConstants.Broker.Request.QueryOptionValue.DEFAULT_IN_PREDICATE_SORT_THRESHOLD))) {
-          for (String value : values) {
-            int dictId = dictionary.indexOf(value);
-            if (dictId >= 0) {
-              dictIdSet.add(dictId);
-            }
+        for (String value : values) {
+          int dictId = dictionary.indexOf(value);
+          if (dictId >= 0) {
+            dictIdSet.add(dictId);
           }
-        } else {
-          List<String> sortedValues =
-              queryContext.getOrComputeSharedValue(List.class, Equivalence.identity().wrap(inPredicate), k -> {
-                List<String> copyValues = new ArrayList<>(values);
-                copyValues.sort(null);
-                return copyValues;
-              });
-          dictionary.getDictIds(sortedValues, dictIdSet);
         }
         break;
       case BYTES:

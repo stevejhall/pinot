@@ -18,22 +18,24 @@
  */
 package org.apache.pinot.common.datablock;
 
+import com.google.common.primitives.Ints;
+import com.google.common.primitives.Longs;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import javax.annotation.Nullable;
-import org.apache.pinot.common.CustomObject;
+import org.apache.pinot.common.datatable.DataTable;
+import org.apache.pinot.common.datatable.DataTableFactory;
 import org.apache.pinot.common.datatable.DataTableImplV3;
 import org.apache.pinot.common.datatable.DataTableUtils;
+import org.apache.pinot.common.request.context.ThreadTimer;
 import org.apache.pinot.common.response.ProcessingException;
 import org.apache.pinot.common.utils.DataSchema;
 import org.apache.pinot.common.utils.RoaringBitmapUtils;
-import org.apache.pinot.spi.accounting.ThreadResourceUsageProvider;
 import org.apache.pinot.spi.utils.BigDecimalUtils;
 import org.apache.pinot.spi.utils.ByteArray;
 import org.roaringbitmap.RoaringBitmap;
@@ -78,7 +80,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  * difference is the data layout in FIXED_SIZE_DATA and VARIABLE_SIZE_DATA section, see each impl for details.
  */
 @SuppressWarnings("DuplicatedCode")
-public abstract class BaseDataBlock implements DataBlock {
+public abstract class BaseDataBlock implements DataTable {
   protected static final int HEADER_SIZE = Integer.BYTES * 13;
   // _errCodeToExceptionMap stores exceptions as a map of errorCode->errorMessage
   protected Map<Integer, String> _errCodeToExceptionMap;
@@ -205,7 +207,7 @@ public abstract class BaseDataBlock implements DataBlock {
 
   @Override
   public int getVersion() {
-    return 0;
+    return DataTableFactory.VERSION_4;
   }
 
   /**
@@ -434,11 +436,17 @@ public abstract class BaseDataBlock implements DataBlock {
   @Override
   public byte[] toBytes()
       throws IOException {
-    ThreadResourceUsageProvider threadResourceUsageProvider = new ThreadResourceUsageProvider();
+    ThreadTimer threadTimer = new ThreadTimer();
 
     ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
     DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
     writeLeadingSections(dataOutputStream);
+
+    // Add table serialization time metadata if thread timer is enabled.
+    if (ThreadTimer.isThreadCpuTimeMeasurementEnabled()) {
+      long responseSerializationCpuTimeNs = threadTimer.getThreadTimeNs();
+      getMetadata().put(MetadataKey.RESPONSE_SER_CPU_TIME_NS.getName(), String.valueOf(responseSerializationCpuTimeNs));
+    }
 
     // Write metadata: length followed by actual metadata bytes.
     // NOTE: We ignore metadata serialization time in "responseSerializationCpuTimeNs" as it's negligible while
@@ -524,14 +532,80 @@ public abstract class BaseDataBlock implements DataBlock {
     }
   }
 
+  /**
+   * Serialize metadata section to bytes.
+   * Format of the bytes looks like:
+   * [numEntries, bytesOfKV2, bytesOfKV2, bytesOfKV3]
+   * For each KV pair:
+   * - if the value type is String, encode it as: [enumKeyOrdinal, valueLength, Utf8EncodedValue].
+   * - if the value type is int, encode it as: [enumKeyOrdinal, bigEndianRepresentationOfIntValue]
+   * - if the value type is long, encode it as: [enumKeyOrdinal, bigEndianRepresentationOfLongValue]
+   *
+   * Unlike V2, where numeric metadata values (int and long) in V3 are encoded in UTF-8 in the wire format,
+   * in V3 big endian representation is used.
+   */
   private byte[] serializeMetadata()
       throws IOException {
-    return new byte[0];
+    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+    DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
+
+    dataOutputStream.writeInt(_metadata.size());
+
+    for (Map.Entry<String, String> entry : _metadata.entrySet()) {
+      MetadataKey key = MetadataKey.getByName(entry.getKey());
+      // Ignore unknown keys.
+      if (key == null) {
+        continue;
+      }
+      String value = entry.getValue();
+      dataOutputStream.writeInt(key.getId());
+      if (key.getValueType() == MetadataValueType.INT) {
+        dataOutputStream.write(Ints.toByteArray(Integer.parseInt(value)));
+      } else if (key.getValueType() == MetadataValueType.LONG) {
+        dataOutputStream.write(Longs.toByteArray(Long.parseLong(value)));
+      } else {
+        byte[] valueBytes = value.getBytes(UTF_8);
+        dataOutputStream.writeInt(valueBytes.length);
+        dataOutputStream.write(valueBytes);
+      }
+    }
+
+    return byteArrayOutputStream.toByteArray();
   }
 
+  /**
+   * Even though the wire format of V3 uses UTF-8 for string/bytes and big-endian for numeric values,
+   * the in-memory representation is STRING based for processing the metadata before serialization
+   * (by the server as it adds the statistics in metadata) and after deserialization (by the broker as it receives
+   * DataTable from each server and aggregates the values).
+   * This is to make V3 implementation keep the consumers of Map<String, String> getMetadata() API in the code happy
+   * by internally converting it.
+   *
+   * This method use relative operations on the ByteBuffer and expects the buffer's position to be set correctly.
+   */
   private Map<String, String> deserializeMetadata(ByteBuffer buffer)
       throws IOException {
-    return Collections.emptyMap();
+    int numEntries = buffer.getInt();
+    Map<String, String> metadata = new HashMap<>();
+    for (int i = 0; i < numEntries; i++) {
+      int keyId = buffer.getInt();
+      MetadataKey key = MetadataKey.getById(keyId);
+      // Ignore unknown keys.
+      if (key == null) {
+        continue;
+      }
+      if (key.getValueType() == MetadataValueType.INT) {
+        String value = "" + buffer.getInt();
+        metadata.put(key.getName(), value);
+      } else if (key.getValueType() == MetadataValueType.LONG) {
+        String value = "" + buffer.getLong();
+        metadata.put(key.getName(), value);
+      } else {
+        String value = DataTableUtils.decodeString(buffer);
+        metadata.put(key.getName(), value);
+      }
+    }
+    return metadata;
   }
 
   private byte[] serializeExceptions()
@@ -569,13 +643,66 @@ public abstract class BaseDataBlock implements DataBlock {
   public String toString() {
     if (_dataSchema == null) {
       return _metadata.toString();
-    } else {
-      StringBuilder stringBuilder = new StringBuilder();
-      stringBuilder.append("resultSchema:").append('\n');
-      stringBuilder.append(_dataSchema).append('\n');
-      stringBuilder.append("numRows: ").append(_numRows).append('\n');
-      stringBuilder.append("metadata: ").append(_metadata.toString()).append('\n');
-      return stringBuilder.toString();
+    }
+
+    StringBuilder stringBuilder = new StringBuilder();
+    stringBuilder.append(_dataSchema).append('\n');
+    stringBuilder.append("numRows: ").append(_numRows).append('\n');
+
+    DataSchema.ColumnDataType[] storedColumnDataTypes = _dataSchema.getStoredColumnDataTypes();
+    _fixedSizeData.position(0);
+    for (int rowId = 0; rowId < _numRows; rowId++) {
+      for (int colId = 0; colId < _numColumns; colId++) {
+        switch (storedColumnDataTypes[colId]) {
+          case INT:
+            stringBuilder.append(_fixedSizeData.getInt());
+            break;
+          case LONG:
+            stringBuilder.append(_fixedSizeData.getLong());
+            break;
+          case FLOAT:
+            stringBuilder.append(_fixedSizeData.getFloat());
+            break;
+          case DOUBLE:
+            stringBuilder.append(_fixedSizeData.getDouble());
+            break;
+          case STRING:
+            stringBuilder.append(_fixedSizeData.getInt());
+            break;
+          // Object and array.
+          default:
+            stringBuilder.append(String.format("(%s:%s)", _fixedSizeData.getInt(), _fixedSizeData.getInt()));
+            break;
+        }
+        stringBuilder.append("\t");
+      }
+      stringBuilder.append("\n");
+    }
+    return stringBuilder.toString();
+  }
+
+  public enum Type {
+    ROW(0),
+    COLUMNAR(1),
+    METADATA(2);
+
+    private final int _ordinal;
+
+    Type(int ordinal) {
+      _ordinal = ordinal;
+    }
+
+    public static Type fromOrdinal(int ordinal) {
+      switch (ordinal) {
+        case 0:
+          return ROW;
+        case 1:
+          return COLUMNAR;
+        case 2:
+          return METADATA;
+        default:
+          throw new IllegalArgumentException("Invalid ordinal: " + ordinal);
+      }
     }
   }
 }

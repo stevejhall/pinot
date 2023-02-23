@@ -26,7 +26,7 @@ import org.apache.pinot.spi.data.FieldSpec.DataType;
 public class FloatDictionary extends BaseImmutableDictionary {
 
   public FloatDictionary(PinotDataBuffer dataBuffer, int length) {
-    super(dataBuffer, length, Float.BYTES);
+    super(dataBuffer, length, Float.BYTES, (byte) 0);
   }
 
   @Override

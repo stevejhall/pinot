@@ -19,7 +19,6 @@
 package org.apache.pinot.query;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -28,6 +27,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.apache.calcite.rel.RelDistribution;
+import org.apache.pinot.core.transport.ServerInstance;
 import org.apache.pinot.query.planner.PlannerUtils;
 import org.apache.pinot.query.planner.QueryPlan;
 import org.apache.pinot.query.planner.StageMetadata;
@@ -38,7 +38,6 @@ import org.apache.pinot.query.planner.stage.JoinNode;
 import org.apache.pinot.query.planner.stage.MailboxReceiveNode;
 import org.apache.pinot.query.planner.stage.ProjectNode;
 import org.apache.pinot.query.planner.stage.StageNode;
-import org.apache.pinot.query.routing.VirtualServer;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
@@ -78,7 +77,14 @@ public class QueryCompilationTest extends QueryEnvironmentTestBase {
     }
   }
 
-  private static void assertGroupBySingletonAfterJoin(QueryPlan queryPlan, boolean shouldRewrite) throws Exception {
+  @Test
+  public void testQueryGroupByAfterJoinShouldNotDoDataShuffle()
+      throws Exception {
+    String query = "SELECT a.col1, a.col2, AVG(b.col3) FROM a JOIN b ON a.col1 = b.col2 "
+        + " WHERE a.col3 >= 0 AND a.col2 = 'a' AND b.col3 < 0 GROUP BY a.col1, a.col2";
+    QueryPlan queryPlan = _queryEnvironment.planQuery(query);
+    Assert.assertEquals(queryPlan.getQueryStageMap().size(), 5);
+    Assert.assertEquals(queryPlan.getStageMetadataMap().size(), 5);
     for (Map.Entry<Integer, StageMetadata> e : queryPlan.getStageMetadataMap().entrySet()) {
       if (e.getValue().getScannedTables().size() == 0 && !PlannerUtils.isRootStage(e.getKey())) {
         StageNode node = queryPlan.getQueryStageMap().get(e.getKey());
@@ -94,11 +100,7 @@ public class QueryCompilationTest extends QueryEnvironmentTestBase {
           if (node instanceof AggregateNode && node.getInputs().get(0) instanceof MailboxReceiveNode) {
             // AGG is exchanged with singleton since it has already been distributed by JOIN.
             MailboxReceiveNode input = (MailboxReceiveNode) node.getInputs().get(0);
-            if (shouldRewrite) {
-              Assert.assertEquals(input.getExchangeType(), RelDistribution.Type.SINGLETON);
-            } else {
-              Assert.assertNotEquals(input.getExchangeType(), RelDistribution.Type.SINGLETON);
-            }
+            Assert.assertEquals(input.getExchangeType(), RelDistribution.Type.SINGLETON);
             break;
           }
           node = node.getInputs().get(0);
@@ -119,19 +121,19 @@ public class QueryCompilationTest extends QueryEnvironmentTestBase {
       if (tables.size() == 1) {
         // table scan stages; for tableA it should have 2 hosts, for tableB it should have only 1
         Assert.assertEquals(
-            e.getValue().getServerInstances().stream().map(VirtualServer::toString).collect(Collectors.toList()),
-            tables.get(0).equals("a") ? ImmutableList.of("0@Server_localhost_2", "0@Server_localhost_1")
-                : ImmutableList.of("0@Server_localhost_1"));
+            e.getValue().getServerInstances().stream().map(ServerInstance::toString).collect(Collectors.toList()),
+            tables.get(0).equals("a") ? ImmutableList.of("Server_localhost_2", "Server_localhost_1")
+                : ImmutableList.of("Server_localhost_1"));
       } else if (!PlannerUtils.isRootStage(e.getKey())) {
         // join stage should have both servers used.
         Assert.assertEquals(
-            e.getValue().getServerInstances().stream().map(VirtualServer::toString).collect(Collectors.toSet()),
-            ImmutableSet.of("0@Server_localhost_1", "0@Server_localhost_2"));
+            e.getValue().getServerInstances().stream().map(ServerInstance::toString).collect(Collectors.toList()),
+            ImmutableList.of("Server_localhost_1", "Server_localhost_2"));
       } else {
         // reduce stage should have the reducer instance.
         Assert.assertEquals(
-            e.getValue().getServerInstances().stream().map(VirtualServer::toString).collect(Collectors.toSet()),
-            ImmutableSet.of("0@Server_localhost_3"));
+            e.getValue().getServerInstances().stream().map(ServerInstance::toString).collect(Collectors.toList()),
+            ImmutableList.of("Server_localhost_3"));
       }
     }
   }
@@ -165,7 +167,7 @@ public class QueryCompilationTest extends QueryEnvironmentTestBase {
         .filter(stageMetadata -> stageMetadata.getScannedTables().size() != 0).collect(Collectors.toList());
     Assert.assertEquals(tableScanMetadataList.size(), 1);
     Assert.assertEquals(tableScanMetadataList.get(0).getServerInstances().size(), 1);
-    Assert.assertEquals(tableScanMetadataList.get(0).getServerInstances().get(0).toString(), "0@Server_localhost_2");
+    Assert.assertEquals(tableScanMetadataList.get(0).getServerInstances().get(0).toString(), "Server_localhost_2");
 
     query = "SELECT * FROM d";
     queryPlan = _queryEnvironment.planQuery(query);
@@ -225,31 +227,6 @@ public class QueryCompilationTest extends QueryEnvironmentTestBase {
     }
   }
 
-  @Test
-  public void testQueryWithHint()
-      throws Exception {
-    // Hinting the query to use final stage aggregation makes server directly return final result
-    // This is useful when data is already partitioned by col1
-    String query = "SELECT /*+ aggFinalStage */ col1, COUNT(*) FROM b GROUP BY col1";
-    QueryPlan queryPlan = _queryEnvironment.planQuery(query);
-    Assert.assertEquals(queryPlan.getQueryStageMap().size(), 2);
-    Assert.assertEquals(queryPlan.getStageMetadataMap().size(), 2);
-    for (Map.Entry<Integer, StageMetadata> e : queryPlan.getStageMetadataMap().entrySet()) {
-      List<String> tables = e.getValue().getScannedTables();
-      if (tables.size() != 0) {
-        // table scan stages; for tableB it should have only 1
-        Assert.assertEquals(e.getValue().getServerInstances().stream()
-                .map(VirtualServer::toString).sorted().collect(Collectors.toList()),
-            ImmutableList.of("0@Server_localhost_1"));
-      } else if (!PlannerUtils.isRootStage(e.getKey())) {
-        // join stage should have both servers used.
-        Assert.assertEquals(e.getValue().getServerInstances().stream()
-                .map(VirtualServer::toString).sorted().collect(Collectors.toList()),
-            ImmutableList.of("0@Server_localhost_1", "0@Server_localhost_2"));
-      }
-    }
-  }
-
   // --------------------------------------------------------------------------
   // Test Utils.
   // --------------------------------------------------------------------------
@@ -282,9 +259,6 @@ public class QueryCompilationTest extends QueryEnvironmentTestBase {
         new Object[]{"SELECT a.col1 FROM a WHERE a.col1 IN ()", "Encountered \"\" at line"},
         // AT TIME ZONE should fail
         new Object[]{"SELECT a.col1 AT TIME ZONE 'PST' FROM a", "No match found for function signature AT_TIME_ZONE"},
-        // CASE WHEN with non-consolidated result type at compile time.
-        new Object[]{"SELECT SUM(CASE WHEN col3 > 10 THEN 1 WHEN col3 > 20 THEN 2 WHEN col3 > 30 THEN 3 "
-            + "WHEN col3 > 40 THEN 4 WHEN col3 > 50 THEN '5' ELSE 0 END) FROM a", "while converting CASE WHEN"},
     };
   }
 

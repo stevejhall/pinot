@@ -18,6 +18,7 @@
  */
 package org.apache.pinot.plugin.metrics.dropwizard;
 
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.MetricRegistryListener;
@@ -50,8 +51,8 @@ public class DropwizardMetricsRegistry implements PinotMetricsRegistry {
   @Override
   public <T> PinotGauge<T> newGauge(PinotMetricName name, final PinotGauge<T> gauge) {
     final String metricName = name.getMetricName().toString();
-    return (gauge == null) ? new DropwizardGauge<T>((DropwizardSettableGauge) _metricRegistry.gauge(metricName))
-        : new DropwizardGauge<T>(_metricRegistry.gauge(metricName, () -> (DropwizardSettableGauge) gauge.getGauge()));
+    return (gauge == null) ? new DropwizardGauge<T>((Gauge) _metricRegistry.gauge(metricName))
+        : new DropwizardGauge<T>(_metricRegistry.gauge(metricName, () -> (Gauge) gauge.getGauge()));
   }
 
   @Override

@@ -38,9 +38,10 @@ import org.apache.pinot.spi.data.Schema;
  * upgrading Calcite versions.
  */
 public class TypeFactory extends JavaTypeFactoryImpl {
+  private final RelDataTypeSystem _typeSystem;
 
   public TypeFactory(RelDataTypeSystem typeSystem) {
-    super(typeSystem);
+    _typeSystem = typeSystem;
   }
 
   public RelDataType createRelDataTypeFromSchema(Schema schema) {
@@ -69,8 +70,6 @@ public class TypeFactory extends JavaTypeFactoryImpl {
         return createSqlType(SqlTypeName.VARCHAR);
       case BYTES:
         return createSqlType(SqlTypeName.VARBINARY);
-      case BIG_DECIMAL:
-        return createSqlType(SqlTypeName.DECIMAL);
       case JSON:
         // TODO: support JSON, JSON should be supported using a special RelDataType as it is not a simple String,
         // nor can it be easily parsed as a STRUCT.

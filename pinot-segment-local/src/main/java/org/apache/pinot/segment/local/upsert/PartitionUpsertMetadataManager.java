@@ -83,9 +83,4 @@ public interface PartitionUpsertMetadataManager extends Closeable {
    * Returns the merged record when partial-upsert is enabled.
    */
   GenericRow updateRecord(GenericRow record, RecordInfo recordInfo);
-
-  /**
-   * Stops the metadata manager. After invoking this method, no access to the metadata will be accepted.
-   */
-  void stop();
 }

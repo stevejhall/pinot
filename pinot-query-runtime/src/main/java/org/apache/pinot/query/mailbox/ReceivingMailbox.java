@@ -28,15 +28,14 @@ package org.apache.pinot.query.mailbox;
 public interface ReceivingMailbox<T> {
 
   /**
-   * Get the unique identifier for the mailbox.
+   * get the unique identifier for the mailbox.
    *
    * @return Mailbox ID.
    */
   String getMailboxId();
 
   /**
-   * Receive a data packet from the mailbox. Depending on the implementation, this may return null. The caller should
-   * use {@link ReceivingMailbox#isClosed()} to determine if the sender is done sending and the channel is closed.
+   * receive a data packet from the mailbox.
    * @return data packet.
    * @throws Exception
    */
@@ -54,6 +53,4 @@ public interface ReceivingMailbox<T> {
    * @return
    */
   boolean isClosed();
-
-  void cancel(Throwable e);
 }

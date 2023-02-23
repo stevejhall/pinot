@@ -133,5 +133,6 @@ public class ZookeeperResourceTest {
         new TypeReference<List<ZNRecord>>() { });
     Assert.assertEquals(recordList4.get(0), recordList3.get(0));
     Assert.assertEquals(recordList4.get(1), recordList3.get(1));
+
   }
 }

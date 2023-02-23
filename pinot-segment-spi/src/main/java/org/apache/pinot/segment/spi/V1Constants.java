@@ -29,6 +29,7 @@ public class V1Constants {
 
   public static class Str {
     public static final char DEFAULT_STRING_PAD_CHAR = '\0';
+    public static final char LEGACY_STRING_PAD_CHAR = '%';
   }
 
   public static class Dict {

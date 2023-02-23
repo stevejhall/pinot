@@ -92,13 +92,10 @@ import {
   requestDeleteUser,
   requestUpdateUser,
   getTaskProgress,
-  getSegmentReloadStatus,
-  getTaskRuntimeConfig
+  getSegmentReloadStatus
 } from '../requests';
 import { baseApi } from './axios-config';
-import Utils, { getDisplaySegmentStatus } from './Utils';
-import { matchPath } from 'react-router';
-import RouterData from '../router';
+import Utils from './Utils';
 const JSONbig = require('json-bigint')({'storeAsString': true})
 
 // This method is used to display tenants listing on cluster manager home page
@@ -272,17 +269,15 @@ const getQueryResults = (params) => {
     // if sql api throws error, handle here
     if(typeof queryResponse === 'string'){
       errorStr = queryResponse;
-    } 
-    if (queryResponse && queryResponse.exceptions && queryResponse.exceptions.length) {
-      try{
-        errorStr = JSON.stringify(queryResponse.exceptions, null, 2);
-      } catch {
-        errorStr = "";
+    } else if (queryResponse && queryResponse.exceptions && queryResponse.exceptions.length) {
+      errorStr = JSON.stringify(queryResponse.exceptions, null, 2);
+    } else
+    {
+      if (queryResponse.resultTable?.dataSchema?.columnNames?.length)
+      {
+        columnList = queryResponse.resultTable.dataSchema.columnNames;
+        dataArray = queryResponse.resultTable.rows;
       }
-    } 
-    if (queryResponse.resultTable?.dataSchema?.columnNames?.length) {
-      columnList = queryResponse.resultTable.dataSchema.columnNames;
-      dataArray = queryResponse.resultTable.rows;
     }
 
     const columnStats = ['timeUsedMs',
@@ -356,28 +351,12 @@ const getSchemaObject = async (schemaName) =>{
       return schemaObj;
   }
 
-// This method is used to display schema listing on the tables listing page
-// API: /schemas
-// Expected Output: {columns: [], records: []}
-const getListingSchemaList = () => {
-  return getSchemaList().then((results) => {
-    const responseObj = {
-      columns: ['Schemas'],
-      records: []
-    };
-    results.data.forEach((result)=>{
-      responseObj.records.push([result]);
-    });
-    return responseObj;
-  })
-};
-
-const allSchemaDetailsColumnHeader = ["Schema Name", "Dimension Columns", "Date-Time Columns", "Metrics Columns", "Total Columns"];
-
-const getAllSchemaDetails = async (schemaList) => {
+const getAllSchemaDetails = async () => {
+  const columnHeaders = ["Schema Name", "Dimension Columns", "Date-Time Columns", "Metrics Columns", "Total Columns"]
   let schemaDetails:Array<any> = [];
   let promiseArr = [];
-  promiseArr = schemaList.map(async (o)=>{
+  const {data} = await getSchemaList()
+  promiseArr = data.map(async (o)=>{
     return await getSchema(o);
   });
   const results = await Promise.all(promiseArr);
@@ -391,20 +370,19 @@ const getAllSchemaDetails = async (schemaList) => {
     return schemaObj;
   })
   return {
-    columns: allSchemaDetailsColumnHeader,
+    columns: columnHeaders,
     records: schemaDetails
   };
 }
 
-const allTableDetailsColumnHeader = [
-  'Table Name',
-  'Reported Size',
-  'Estimated Size',
-  'Number of Segments',
-  'Status',
-];
-
 const getAllTableDetails = (tablesList) => {
+  const columnHeaders = [
+    'Table Name',
+    'Reported Size',
+    'Estimated Size',
+    'Number of Segments',
+    'Status',
+  ];
   if (tablesList.length) {
     const promiseArr = [];
     tablesList.map((name) => {
@@ -454,13 +432,13 @@ const getAllTableDetails = (tablesList) => {
         }
       });
       return {
-        columns: allTableDetailsColumnHeader,
+        columns: columnHeaders,
         records: finalRecordsArr,
       };
     });
   }
   return {
-    columns: allTableDetailsColumnHeader,
+    columns: columnHeaders,
     records: []
   };
 };
@@ -496,7 +474,7 @@ const getSegmentList = (tableName) => {
       records: Object.keys(idealStateObj).map((key) => {
         return [
           key,
-          getDisplaySegmentStatus(idealStateObj[key], externalViewObj[key])
+          getSegmentStatus(idealStateObj[key], externalViewObj[key])
         ];
       }),
       externalViewObj
@@ -831,11 +809,12 @@ const getTasksList = async (tableName, taskType) => {
       const promiseArr = [];
       const fetchInfo = async (taskID, status) => {
         const debugData = await getTaskDebugData(taskID);
+        const startTime = moment(get(debugData, 'data.subtaskInfos.0.startTime'), 'YYYY-MM-DD hh:mm:ss');
         finalResponse.records.push([
           taskID,
           status,
-          get(debugData, 'data.startTime', ''),
-          get(debugData, 'data.finishTime', ''),
+          get(debugData, 'data.subtaskInfos.0.startTime'),
+          get(debugData, 'data.subtaskInfos.0.finishTime', ''),
           get(debugData, 'data.subtaskCount.total', 0)
         ]);
       };
@@ -848,12 +827,6 @@ const getTasksList = async (tableName, taskType) => {
   })
   return finalResponse;
 };
-
-const getTaskRuntimeConfigData = async (taskName: string) => {
-  const response = await getTaskRuntimeConfig(taskName);
-  
-  return response.data;
-}
 
 const getTaskDebugData = async (taskName) => {
   const debugRes = await getTaskDebug(taskName);
@@ -895,8 +868,8 @@ const deleteSegmentOp = (tableName, segmentName) => {
   });
 };
 
-const fetchTableJobs = async (tableName: string, jobTypes?: string) => {
-  const response = await getTableJobs(tableName, jobTypes);
+const fetchTableJobs = async (tableName: string) => {
+  const response = await getTableJobs(tableName);
   
   return response.data;
 }
@@ -913,8 +886,8 @@ const updateTable = (tableName: string, table: string) => {
   })
 };
 
-const updateSchema = (schemaName: string, schema: string, reload?: boolean) => {
-  return putSchema(schemaName, schema, reload).then((res)=>{
+const updateSchema = (schemaName: string, schema: string) => {
+  return putSchema(schemaName, schema).then((res)=>{
     return res.data;
   })
 };
@@ -1010,37 +983,6 @@ const getAccessTokenFromHashParams = () => {
   return accessToken;
 };
 
-
-// validates app redirect path with known routes
-const validateRedirectPath = (path: string): boolean => {
-  if(!path) {
-    return false;
-  }
-
-  if(!path.startsWith("/")) {
-    path = "/" + path;
-  }
-
-  let pathName = "";
-
-  try {
-    const appUrl = new URL(location.origin + path);
-    pathName = appUrl.pathname;
-  } catch(err) {
-    console.error(err);
-    return false;
-  }
-
-  const knownAppRoutes = RouterData.map((data) => data.path);
-  const routeMatches = matchPath(pathName, {path: knownAppRoutes, exact: true});
-  
-  if(!routeMatches) {
-    return false;
-  }
-
-  return true;
-};
-
 const getURLWithoutAccessToken = (fallbackUrl = '/'): string => {
   let prefix = '';
   let url = location.hash.substring(1);
@@ -1072,12 +1014,6 @@ const getURLWithoutAccessToken = (fallbackUrl = '/'): string => {
     }
     
     url = urlParams.join('&');
-
-    if(!validateRedirectPath(url)) {
-      // constructed redirect url is not a valid app route
-      // redirect to fallBackUrl
-      url = fallbackUrl;
-    }
   } else {
     url = fallbackUrl;
   }
@@ -1154,7 +1090,6 @@ export default {
   getTableSchemaData,
   getQueryResults,
   getTenantTableData,
-  allTableDetailsColumnHeader,
   getAllTableDetails,
   getTableSummaryData,
   getSegmentList,
@@ -1183,7 +1118,6 @@ export default {
   fetchSegmentReloadStatus,
   getTaskTypeDebugData,
   getTableData,
-  getTaskRuntimeConfigData,
   getTaskInfo,
   stopAllTasks,
   resumeAllTasks,
@@ -1213,8 +1147,6 @@ export default {
   saveSchemaAction,
   saveTableAction,
   getSchemaData,
-  getQuerySchemaList: getListingSchemaList,
-  allSchemaDetailsColumnHeader,
   getAllSchemaDetails,
   getTableState,
   getAuthInfo,

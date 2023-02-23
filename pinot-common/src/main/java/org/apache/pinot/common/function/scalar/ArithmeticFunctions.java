@@ -30,27 +30,27 @@ public class ArithmeticFunctions {
   private ArithmeticFunctions() {
   }
 
-  @ScalarFunction(names = {"add", "plus"})
+  @ScalarFunction
   public static double plus(double a, double b) {
     return a + b;
   }
 
-  @ScalarFunction(names = {"sub", "minus"})
+  @ScalarFunction
   public static double minus(double a, double b) {
     return a - b;
   }
 
-  @ScalarFunction(names = {"mult", "times"})
+  @ScalarFunction
   public static double times(double a, double b) {
     return a * b;
   }
 
-  @ScalarFunction(names = {"div", "divide"})
+  @ScalarFunction
   public static double divide(double a, double b) {
     return a / b;
   }
 
-  @ScalarFunction(names = {"div", "divide"})
+  @ScalarFunction
   public static double divide(double a, double b, double defaultValue) {
     return (b == 0) ? defaultValue : a / b;
   }
@@ -135,14 +135,14 @@ public class ArithmeticFunctions {
 
   // Big Decimal Implementation has been used here to avoid overflows
   // when multiplying by Math.pow(10, scale) for rounding
-  @ScalarFunction(names = {"roundDecimal", "round_decimal"})
+  @ScalarFunction
   public static double roundDecimal(double a, int scale) {
     return BigDecimal.valueOf(a).setScale(scale, RoundingMode.HALF_UP).doubleValue();
   }
 
   // TODO: The function should ideally be named 'round'
   // but it is not possible because of existing DateTimeFunction with same name.
-  @ScalarFunction(names = {"roundDecimal", "round_decimal"})
+  @ScalarFunction
   public static double roundDecimal(double a) {
     return Math.round(a);
   }

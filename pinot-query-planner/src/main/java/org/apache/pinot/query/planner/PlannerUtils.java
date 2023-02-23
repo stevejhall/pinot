@@ -40,10 +40,6 @@ public class PlannerUtils {
     return stageId == 0;
   }
 
-  public static boolean isFinalStage(int stageId) {
-    return stageId == 1;
-  }
-
   public static String explainPlan(RelNode relRoot, SqlExplainFormat format, SqlExplainLevel explainLevel) {
     return RelOptUtil.dumpPlan("Execution Plan", relRoot, format, explainLevel);
   }

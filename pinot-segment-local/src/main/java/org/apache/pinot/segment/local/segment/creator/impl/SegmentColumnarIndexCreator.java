@@ -35,7 +35,6 @@ import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.pinot.common.utils.FileUtils;
 import org.apache.pinot.segment.local.io.util.PinotDataBitSet;
-import org.apache.pinot.segment.local.segment.creator.impl.inv.BitSlicedRangeIndexCreator;
 import org.apache.pinot.segment.local.segment.creator.impl.nullvalue.NullValueVectorCreator;
 import org.apache.pinot.segment.local.segment.store.TextIndexUtils;
 import org.apache.pinot.segment.local.utils.GeometrySerializer;
@@ -61,7 +60,6 @@ import org.apache.pinot.spi.config.table.BloomFilterConfig;
 import org.apache.pinot.spi.config.table.FSTType;
 import org.apache.pinot.spi.config.table.FieldConfig;
 import org.apache.pinot.spi.config.table.IndexingConfig;
-import org.apache.pinot.spi.config.table.JsonIndexConfig;
 import org.apache.pinot.spi.config.table.SegmentZKPropsConfig;
 import org.apache.pinot.spi.data.DateTimeFieldSpec;
 import org.apache.pinot.spi.data.DateTimeFormatSpec;
@@ -70,7 +68,6 @@ import org.apache.pinot.spi.data.FieldSpec.DataType;
 import org.apache.pinot.spi.data.FieldSpec.FieldType;
 import org.apache.pinot.spi.data.Schema;
 import org.apache.pinot.spi.data.readers.GenericRow;
-import org.apache.pinot.spi.utils.BytesUtils;
 import org.apache.pinot.spi.utils.TimeUtils;
 import org.joda.time.DateTimeZone;
 import org.joda.time.Interval;
@@ -170,17 +167,11 @@ public class SegmentColumnarIndexCreator implements SegmentCreator {
       fstIndexColumns.add(columnName);
     }
 
-    Map<String, JsonIndexConfig> jsonIndexConfigs = _config.getJsonIndexConfigs();
-    for (String columnName : jsonIndexConfigs.keySet()) {
+    Set<String> jsonIndexColumns = new HashSet<>();
+    for (String columnName : _config.getJsonIndexCreationColumns()) {
       Preconditions.checkState(schema.hasColumn(columnName),
-          "Cannot create json index for column: %s because it is not in schema", columnName);
-    }
-
-    Set<String> forwardIndexDisabledColumns = new HashSet<>();
-    for (String columnName : _config.getForwardIndexDisabledColumns()) {
-      Preconditions.checkState(schema.hasColumn(columnName), String.format("Invalid config. Can't disable "
-          + "forward index creation for a column: %s that does not exist in schema", columnName));
-      forwardIndexDisabledColumns.add(columnName);
+          "Cannot create text index for column: %s because it is not in schema", columnName);
+      jsonIndexColumns.add(columnName);
     }
 
     Map<String, H3IndexConfig> h3IndexConfigs = _config.getH3IndexConfigs();
@@ -205,10 +196,6 @@ public class SegmentColumnarIndexCreator implements SegmentCreator {
       Preconditions.checkState(dictEnabledColumn || !invertedIndexColumns.contains(columnName),
           "Cannot create inverted index for raw index column: %s", columnName);
 
-      boolean forwardIndexDisabled = forwardIndexDisabledColumns.contains(columnName);
-      validateForwardIndexDisabledIndexCompatibility(columnName, forwardIndexDisabled, dictEnabledColumn,
-          columnIndexCreationInfo, invertedIndexColumns, rangeIndexColumns, rangeIndexVersion, fieldSpec);
-
       IndexCreationContext.Common context = IndexCreationContext.builder()
           .withIndexDir(_indexDir)
           .withCardinality(columnIndexCreationInfo.getDistinctValueCount())
@@ -221,7 +208,6 @@ public class SegmentColumnarIndexCreator implements SegmentCreator {
           .withColumnIndexCreationInfo(columnIndexCreationInfo)
           .sorted(columnIndexCreationInfo.isSorted())
           .onHeap(segmentCreationSpec.isOnHeap())
-          .withforwardIndexDisabled(forwardIndexDisabled)
           .build();
       // Initialize forward index creator
       ChunkCompressionType chunkCompressionType =
@@ -283,9 +269,7 @@ public class SegmentColumnarIndexCreator implements SegmentCreator {
           }
         }
         _textIndexCreatorMap.put(columnName,
-            _indexCreatorProvider.newTextIndexCreator(context.forTextIndex(fstType, true,
-                TextIndexUtils.extractStopWordsInclude(columnName, _columnProperties),
-                TextIndexUtils.extractStopWordsExclude(columnName, _columnProperties))));
+            _indexCreatorProvider.newTextIndexCreator(context.forTextIndex(fstType, true)));
       }
 
       if (fstIndexColumns.contains(columnName)) {
@@ -294,10 +278,8 @@ public class SegmentColumnarIndexCreator implements SegmentCreator {
                 (String[]) columnIndexCreationInfo.getSortedUniqueElementsArray())));
       }
 
-      JsonIndexConfig jsonIndexConfig = jsonIndexConfigs.get(columnName);
-      if (jsonIndexConfig != null) {
-        _jsonIndexCreatorMap.put(columnName,
-            _indexCreatorProvider.newJsonIndexCreator(context.forJsonIndex(jsonIndexConfig)));
+      if (jsonIndexColumns.contains(columnName)) {
+        _jsonIndexCreatorMap.put(columnName, _indexCreatorProvider.newJsonIndexCreator(context.forJsonIndex()));
       }
 
       H3IndexConfig h3IndexConfig = h3IndexConfigs.get(columnName);
@@ -311,45 +293,6 @@ public class SegmentColumnarIndexCreator implements SegmentCreator {
         // Initialize Null value vector map
         _nullValueVectorCreatorMap.put(columnName, new NullValueVectorCreator(_indexDir, columnName));
       }
-    }
-  }
-
-  /**
-   * Validates the compatibility of the indexes if the column has the forward index disabled. Throws exceptions due to
-   * compatibility mismatch. The checks performed are:
-   *     - Validate dictionary is enabled.
-   *     - Validate inverted index is enabled.
-   *     - Validate that either no range index exists for column or the range index version is at least 2 and isn't a
-   *       multi-value column (since multi-value defaults to index v1).
-   *
-   * @param columnName Name of the column
-   * @param forwardIndexDisabled Whether the forward index is disabled for column or not
-   * @param dictEnabledColumn Whether the column is dictionary enabled or not
-   * @param columnIndexCreationInfo Column index creation info
-   * @param invertedIndexColumns Set of columns with inverted index enabled
-   * @param rangeIndexColumns Set of columns with range index enabled
-   * @param rangeIndexVersion Range index version
-   * @param fieldSpec FieldSpec of column
-   */
-  private void validateForwardIndexDisabledIndexCompatibility(String columnName, boolean forwardIndexDisabled,
-      boolean dictEnabledColumn, ColumnIndexCreationInfo columnIndexCreationInfo, Set<String> invertedIndexColumns,
-      Set<String> rangeIndexColumns, int rangeIndexVersion, FieldSpec fieldSpec) {
-    if (!forwardIndexDisabled) {
-      return;
-    }
-
-    Preconditions.checkState(dictEnabledColumn,
-        String.format("Cannot disable forward index for column %s without dictionary", columnName));
-    Preconditions.checkState(invertedIndexColumns.contains(columnName),
-        String.format("Cannot disable forward index for column %s without inverted index enabled", columnName));
-    if (rangeIndexColumns.contains(columnName)) {
-      Preconditions.checkState(fieldSpec.isSingleValueField(),
-          String.format("Feature not supported for multi-value columns with range index. Cannot disable forward index "
-              + "for column %s. Disable range index on this column to use this feature", columnName));
-      Preconditions.checkState(rangeIndexVersion == BitSlicedRangeIndexCreator.VERSION,
-          String.format("Feature not supported for single-value columns with range index version < 2. Cannot disable "
-              + "forward index for column %s. Either disable range index or create range index with version >= 2 to "
-              + "use this feature", columnName));
     }
   }
 
@@ -376,45 +319,25 @@ public class SegmentColumnarIndexCreator implements SegmentCreator {
       return false;
     }
 
-    if (config.isOptimizeDictionary()) {
+    // Do not create dictionary if index size with dictionary is going to be larger than index size without dictionary
+    // This is done to reduce the cost of dictionary for high cardinality columns
+    // Off by default and needs optimizeDictionaryEnabled to be set to true
+    if (config.isOptimizeDictionaryForMetrics() && spec.getFieldType() == FieldType.METRIC && spec.isSingleValueField()
+        && spec.getDataType().isFixedWidth()) {
+      long dictionarySize = info.getDistinctValueCount() * spec.getDataType().size();
+      long forwardIndexSize =
+          ((long) info.getTotalNumberOfEntries() * PinotDataBitSet.getNumBitsPerValue(info.getDistinctValueCount() - 1)
+              + Byte.SIZE - 1) / Byte.SIZE;
 
-      // Do not create dictionaries for json or text index columns as they are high-cardinality values almost always
-      if ((config.getJsonIndexConfigs().containsKey(column)
-          || config.getTextIndexCreationColumns().contains(column))) {
+      double indexWithDictSize = dictionarySize + forwardIndexSize;
+      double indexWithoutDictSize = info.getTotalNumberOfEntries() * spec.getDataType().size();
+
+      double indexSizeRatio = indexWithoutDictSize / indexWithDictSize;
+      if (indexSizeRatio <= config.getNoDictionarySizeRatioThreshold()) {
         return false;
       }
-
-      // Do not create dictionary if index size with dictionary is going to be larger than index size without dictionary
-      // This is done to reduce the cost of dictionary for high cardinality columns
-      // Off by default and needs optimizeDictionary to be set to true
-      if (spec.isSingleValueField() && spec.getDataType().isFixedWidth()) {
-        return shouldCreateDictionaryWithinThreshold(info, config, spec);
-      }
     }
 
-    if (config.isOptimizeDictionaryForMetrics() && !config.isOptimizeDictionary()) {
-      if (spec.isSingleValueField() && spec.getDataType().isFixedWidth() && spec.getFieldType() == FieldType.METRIC) {
-        return shouldCreateDictionaryWithinThreshold(info, config, spec);
-      }
-    }
-
-    return info.isCreateDictionary();
-  }
-
-  private boolean shouldCreateDictionaryWithinThreshold(ColumnIndexCreationInfo info,
-      SegmentGeneratorConfig config, FieldSpec spec) {
-    long dictionarySize = info.getDistinctValueCount() * spec.getDataType().size();
-    long forwardIndexSize =
-        ((long) info.getTotalNumberOfEntries()
-            * PinotDataBitSet.getNumBitsPerValue(info.getDistinctValueCount() - 1) + Byte.SIZE - 1) / Byte.SIZE;
-
-    double indexWithDictSize = dictionarySize + forwardIndexSize;
-    double indexWithoutDictSize = info.getTotalNumberOfEntries() * spec.getDataType().size();
-
-    double indexSizeRatio = indexWithoutDictSize / indexWithDictSize;
-    if (indexSizeRatio <= config.getNoDictionarySizeRatioThreshold()) {
-      return false;
-    }
     return info.isCreateDictionary();
   }
 
@@ -434,17 +357,13 @@ public class SegmentColumnarIndexCreator implements SegmentCreator {
       FieldSpec fieldSpec) {
     ChunkCompressionType compressionType = segmentCreationSpec.getRawIndexCompressionType().get(fieldSpec.getName());
     if (compressionType == null) {
-      compressionType = getDefaultCompressionType(fieldSpec.getFieldType());
-    }
-
-    return compressionType;
-  }
-
-  public static ChunkCompressionType getDefaultCompressionType(FieldType fieldType) {
-    if (fieldType == FieldSpec.FieldType.METRIC) {
-      return ChunkCompressionType.PASS_THROUGH;
+      if (fieldSpec.getFieldType() == FieldSpec.FieldType.METRIC) {
+        return ChunkCompressionType.PASS_THROUGH;
+      } else {
+        return ChunkCompressionType.LZ4;
+      }
     } else {
-      return ChunkCompressionType.LZ4;
+      return compressionType;
     }
   }
 
@@ -469,21 +388,11 @@ public class SegmentColumnarIndexCreator implements SegmentCreator {
       BloomFilterCreator bloomFilterCreator = _bloomFilterCreatorMap.get(columnName);
       if (bloomFilterCreator != null) {
         if (fieldSpec.isSingleValueField()) {
-          if (fieldSpec.getDataType() == DataType.BYTES) {
-            bloomFilterCreator.add(BytesUtils.toHexString((byte[]) columnValueToIndex));
-          } else {
-            bloomFilterCreator.add(columnValueToIndex.toString());
-          }
+          bloomFilterCreator.add(columnValueToIndex.toString());
         } else {
           Object[] values = (Object[]) columnValueToIndex;
-          if (fieldSpec.getDataType() == DataType.BYTES) {
-            for (Object value : values) {
-              bloomFilterCreator.add(BytesUtils.toHexString((byte[]) value));
-            }
-          } else {
-            for (Object value : values) {
-              bloomFilterCreator.add(value.toString());
-            }
+          for (Object value : values) {
+            bloomFilterCreator.add(value.toString());
           }
         }
       }

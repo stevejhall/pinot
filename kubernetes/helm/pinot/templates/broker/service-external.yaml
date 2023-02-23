@@ -34,8 +34,4 @@ spec:
       port: {{ .Values.broker.external.port }}
   selector:
     {{- include "pinot.brokerMatchLabels" . | nindent 4 }}
-{{- with .Values.broker.service.loadBalancerSourceRanges }}
-  loadBalancerSourceRanges:
-{{ toYaml . | indent 4 }}
-{{- end }}
 {{- end }}

@@ -24,7 +24,6 @@ import org.apache.pinot.spi.stream.StreamConfig;
 import org.apache.pulsar.client.api.Authentication;
 import org.apache.pulsar.client.api.AuthenticationFactory;
 import org.apache.pulsar.client.api.ClientBuilder;
-import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.Reader;
 import org.slf4j.Logger;
@@ -39,14 +38,19 @@ public class PulsarPartitionLevelConnectionHandler {
 
   protected final PulsarConfig _config;
   protected final String _clientId;
+  protected final int _partition;
+  protected final String _topic;
   protected PulsarClient _pulsarClient = null;
+  protected Reader<byte[]> _reader = null;
 
   /**
    * Creates a new instance of {@link PulsarClient} and {@link Reader}
    */
-  public PulsarPartitionLevelConnectionHandler(String clientId, StreamConfig streamConfig) {
+  public PulsarPartitionLevelConnectionHandler(String clientId, StreamConfig streamConfig, int partition) {
     _config = new PulsarConfig(streamConfig, clientId);
     _clientId = clientId;
+    _partition = partition;
+    _topic = _config.getPulsarTopicName();
 
     try {
       ClientBuilder pulsarClientBuilder = PulsarClient.builder().serviceUrl(_config.getBootstrapServers());
@@ -60,22 +64,13 @@ public class PulsarPartitionLevelConnectionHandler {
       }
 
       _pulsarClient = pulsarClientBuilder.build();
-      LOGGER.info("Created pulsar client {}", _pulsarClient);
+
+      _reader = _pulsarClient.newReader().topic(getPartitionedTopicName(partition))
+          .startMessageId(_config.getInitialMessageId()).startMessageIdInclusive().create();
+
+      LOGGER.info("Created consumer with id {} for topic {}", _reader, _config.getPulsarTopicName());
     } catch (Exception e) {
       LOGGER.error("Could not create pulsar consumer", e);
-    }
-  }
-
-  protected Reader<byte[]> createReaderForPartition(String topic, int partition, MessageId initialMessageId) {
-    if (_pulsarClient == null) {
-      throw new RuntimeException("Failed to create reader as no pulsar client found for topic " + topic);
-    }
-    try {
-      return _pulsarClient.newReader().topic(getPartitionedTopicName(topic, partition)).startMessageId(initialMessageId)
-          .startMessageIdInclusive().create();
-    } catch (Exception e) {
-      LOGGER.error("Failed to create pulsar consumer client for topic " + topic + " partition " + partition, e);
-      return null;
     }
   }
 
@@ -84,14 +79,18 @@ public class PulsarPartitionLevelConnectionHandler {
    * as suffix.
    * The method fetches the names of N partitioned topic and returns the topic name of {@param partition}
    */
-  protected String getPartitionedTopicName(String topic, int partition)
+  protected String getPartitionedTopicName(int partition)
       throws Exception {
-    List<String> partitionTopicList = _pulsarClient.getPartitionsForTopic(topic).get();
+    List<String> partitionTopicList = _pulsarClient.getPartitionsForTopic(_topic).get();
     return partitionTopicList.get(partition);
   }
 
   public void close()
       throws IOException {
+    if (_reader != null) {
+      _reader.close();
+    }
+
     if (_pulsarClient != null) {
       _pulsarClient.close();
     }

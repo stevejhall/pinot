@@ -20,15 +20,14 @@ package org.apache.pinot.tools.admin.command;
 
 import com.google.common.base.Preconditions;
 import java.io.File;
-import java.io.FileInputStream;
 import java.net.URI;
-import java.util.List;
+import java.util.Collections;
 import org.apache.commons.io.FileUtils;
-import org.apache.http.Header;
+import org.apache.http.message.BasicNameValuePair;
 import org.apache.pinot.common.utils.FileUploadDownloadClient;
 import org.apache.pinot.common.utils.TarGzCompressionUtils;
+import org.apache.pinot.common.utils.http.HttpClient;
 import org.apache.pinot.spi.auth.AuthProvider;
-import org.apache.pinot.spi.config.table.TableType;
 import org.apache.pinot.spi.utils.CommonConstants;
 import org.apache.pinot.spi.utils.NetUtils;
 import org.apache.pinot.tools.Command;
@@ -71,12 +70,9 @@ public class UploadSegmentCommand extends AbstractBaseAdminCommand implements Co
   @CommandLine.Option(names = {"-segmentDir"}, required = true, description = "Path to segment directory.")
   private String _segmentDir = null;
 
-  @CommandLine.Option(names = {"-tableName"}, required = false, description = "Table name to upload")
+  // TODO: make this as a required field once we deprecate the table name from segment metadata
+  @CommandLine.Option(names = {"-tableName"}, required = false, description = "Table name to upload.")
   private String _tableName = null;
-
-  @CommandLine.Option(names = {"-tableType"}, required = false,
-      description = "Table type to upload. Can be OFFLINE or REALTIME")
-  private TableType _tableType = TableType.OFFLINE;
 
   @CommandLine.Option(names = {"-help", "-h", "--h", "--help"}, required = false, help = true,
       description = "Print this message.")
@@ -144,15 +140,6 @@ public class UploadSegmentCommand extends AbstractBaseAdminCommand implements Co
     return this;
   }
 
-  public UploadSegmentCommand setTableName(String tableName) {
-    _tableName = tableName;
-    return this;
-  }
-
-  public void setTableType(TableType tableType) {
-    _tableType = tableType;
-  }
-
   @Override
   public boolean execute()
       throws Exception {
@@ -186,12 +173,10 @@ public class UploadSegmentCommand extends AbstractBaseAdminCommand implements Co
         }
 
         LOGGER.info("Uploading segment tar file: {}", segmentTarFile);
-        List<Header> headerList =
-            makeAuthHeaders(makeAuthProvider(_authProvider, _authTokenUrl, _authToken, _user, _password));
-
-        FileInputStream fileInputStream = new FileInputStream(segmentTarFile);
-        fileUploadDownloadClient.uploadSegment(uploadSegmentHttpURI, segmentTarFile.getName(),
-            fileInputStream, headerList, null, _tableName, _tableType);
+        fileUploadDownloadClient.uploadSegment(uploadSegmentHttpURI, segmentTarFile.getName(), segmentTarFile,
+            makeAuthHeaders(makeAuthProvider(_authProvider, _authTokenUrl, _authToken, _user, _password)),
+            Collections.singletonList(new BasicNameValuePair(FileUploadDownloadClient.QueryParameters.TABLE_NAME,
+                _tableName)), HttpClient.DEFAULT_SOCKET_TIMEOUT_MS);
       }
     } finally {
       // Delete the temporary working directory.

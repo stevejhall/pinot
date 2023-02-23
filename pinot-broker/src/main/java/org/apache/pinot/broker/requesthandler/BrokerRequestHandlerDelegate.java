@@ -49,11 +49,9 @@ public class BrokerRequestHandlerDelegate implements BrokerRequestHandler {
   private final BrokerRequestHandler _singleStageBrokerRequestHandler;
   private final BrokerRequestHandler _multiStageWorkerRequestHandler;
   private final BrokerMetrics _brokerMetrics;
-  private final String _brokerId;
 
-  public BrokerRequestHandlerDelegate(String brokerId, BrokerRequestHandler singleStageBrokerRequestHandler,
+  public BrokerRequestHandlerDelegate(BrokerRequestHandler singleStageBrokerRequestHandler,
       @Nullable BrokerRequestHandler multiStageWorkerRequestHandler, BrokerMetrics brokerMetrics) {
-    _brokerId = brokerId;
     _singleStageBrokerRequestHandler = singleStageBrokerRequestHandler;
     _multiStageWorkerRequestHandler = multiStageWorkerRequestHandler;
     _brokerMetrics = brokerMetrics;
@@ -83,7 +81,6 @@ public class BrokerRequestHandlerDelegate implements BrokerRequestHandler {
   public BrokerResponse handleRequest(JsonNode request, @Nullable SqlNodeAndOptions sqlNodeAndOptions,
       @Nullable RequesterIdentity requesterIdentity, RequestContext requestContext)
       throws Exception {
-    requestContext.setBrokerId(_brokerId);
     if (sqlNodeAndOptions == null) {
       try {
         sqlNodeAndOptions = RequestUtils.parseQuery(request.get(CommonConstants.Broker.Request.SQL).asText(), request);

@@ -18,7 +18,6 @@
  */
 package org.apache.pinot.broker.routing.adaptiveserverselector;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -104,12 +103,6 @@ public class AdaptiveServerSelectorTest {
     List<Pair<String, Double>> serverRankingWithVal = selector.fetchAllServerRankingsWithScores();
     assertTrue(serverRankingWithVal.isEmpty());
 
-    // -1.0 will be returned for all servers.
-    serverRankingWithVal = selector.fetchServerRankingsWithScores(_servers);
-    for (Pair<String, Double> entry : serverRankingWithVal) {
-      assertEquals(entry.getRight(), -1.0);
-    }
-
     // A random server will be returned if any of the candidate servers do not have stats.
     String selectedServer = selector.select(_servers);
     assertTrue(_servers.contains(selectedServer), selectedServer);
@@ -138,13 +131,6 @@ public class AdaptiveServerSelectorTest {
 
     selectedServer = selector.select(_servers);
     assertEquals(selectedServer, _servers.get(0));
-
-    List<String> candidateServers = new ArrayList<>(Arrays.asList("server2", "server3"));
-    serverRankingWithVal = selector.fetchServerRankingsWithScores(candidateServers);
-    assertEquals(serverRankingWithVal.size(), 2);
-    for (Pair<String, Double> entry : serverRankingWithVal) {
-      assertEquals(entry.getRight(), (double) numInflightReqMap.get(entry.getLeft()));
-    }
 
     // TEST 3 : Populate all servers with unequal stats.
     // Current numInFlightRequests:
@@ -182,17 +168,6 @@ public class AdaptiveServerSelectorTest {
 
     selectedServer = selector.select(Arrays.asList("server3", "server1", "server2"));
     assertEquals(selectedServer, "server1");
-
-    candidateServers = new ArrayList<>(Arrays.asList("server4", "server3", "server1"));
-    serverRankingWithVal = selector.fetchServerRankingsWithScores(candidateServers);
-    assertEquals(serverRankingWithVal.size(), 3);
-    assertEquals(serverRankingWithVal.get(0).getLeft(), "server1");
-    assertEquals(serverRankingWithVal.get(0).getRight(), (double) numInflightReqMap.get("server1"));
-    assertEquals(serverRankingWithVal.get(1).getLeft(), "server3");
-    assertEquals(serverRankingWithVal.get(1).getRight(), (double) numInflightReqMap.get("server3"));
-    assertEquals(serverRankingWithVal.get(2).getLeft(), "server4");
-    assertEquals(serverRankingWithVal.get(2).getRight(), (double) numInflightReqMap.get("server4"));
-
 
     // TEST 4: Populate all servers with unequal stats.
     // Current numInFlightRequests:
@@ -233,14 +208,6 @@ public class AdaptiveServerSelectorTest {
 
     selectedServer = selector.select(Arrays.asList("server3", "server1", "server2"));
     assertEquals(selectedServer, "server2");
-
-    candidateServers = new ArrayList<>(Arrays.asList("server2", "server1"));
-    serverRankingWithVal = selector.fetchServerRankingsWithScores(candidateServers);
-    assertEquals(serverRankingWithVal.size(), 2);
-    assertEquals(serverRankingWithVal.get(0).getLeft(), "server2");
-    assertEquals(serverRankingWithVal.get(0).getRight(), (double) numInflightReqMap.get("server2"));
-    assertEquals(serverRankingWithVal.get(1).getLeft(), "server1");
-    assertEquals(serverRankingWithVal.get(1).getRight(), (double) numInflightReqMap.get("server1"));
 
     // Test 5: Simulate server selection code. Pick the best server using NumInFlightReqSelector during every
     // iteration. Every iteration increases the number of inflight requests but decides with the flip of a coin
@@ -308,17 +275,11 @@ public class AdaptiveServerSelectorTest {
     String selectedServer = selector.select(_servers);
     assertTrue(_servers.contains(selectedServer), selectedServer);
 
-    List<String> candidateServers = new ArrayList<>(Arrays.asList("server2"));
-    serverRankingWithVal = selector.fetchServerRankingsWithScores(candidateServers);
-    assertEquals(serverRankingWithVal.size(), 1);
-    assertEquals(serverRankingWithVal.get(0).getLeft(), "server2");
-    assertEquals(serverRankingWithVal.get(0).getRight(), -1.0);
-
     // TEST 2: Populate all servers with equal latencies.
     for (int ii = 0; ii < 10; ii++) {
       for (String server : _servers) {
         latencyMap.computeIfAbsent(server,
-            k -> new ExponentialMovingAverage(alpha, autodecayWindowMs, warmupDurationMs, avgInitializationVal, null));
+            k -> new ExponentialMovingAverage(alpha, autodecayWindowMs, warmupDurationMs, avgInitializationVal));
         latencyMap.get(server).compute(2);
 
         serverRoutingStatsManager.recordStatsUponResponseArrival(-1, server, 2);
@@ -334,13 +295,6 @@ public class AdaptiveServerSelectorTest {
 
     selectedServer = selector.select(_servers);
     assertEquals(selectedServer, _servers.get(0));
-
-    candidateServers = new ArrayList<>(Arrays.asList("server4", "server3"));
-    serverRankingWithVal = selector.fetchServerRankingsWithScores(candidateServers);
-    assertEquals(serverRankingWithVal.size(), 2);
-    for (Pair<String, Double> entry : serverRankingWithVal) {
-      assertEquals(entry.getRight(), latencyMap.get(entry.getLeft()).getAverage());
-    }
 
     // TEST 3: Populate servers with unequal latencies.
     // Latencies added to servers are as follows:
@@ -376,18 +330,6 @@ public class AdaptiveServerSelectorTest {
 
     selectedServer = selector.select(Arrays.asList("server3", "server4", "server2"));
     assertEquals(selectedServer, "server2");
-
-    candidateServers = new ArrayList<>(Arrays.asList("server4", "server1", "server3"));
-    serverRankingWithVal = selector.fetchServerRankingsWithScores(candidateServers);
-    assertEquals(serverRankingWithVal.size(), 3);
-    prevVal = 0.0;
-    for (Pair<String, Double> entry : serverRankingWithVal) {
-      String server = entry.getLeft();
-      double latency = entry.getRight();
-      assertEquals(latency, (double) latencyMap.get(server).getAverage());
-      assertTrue(prevVal <= latency, prevVal + " " + latency + " " + server);
-      prevVal = latency;
-    }
 
     // Test 4: Simulate server selection code. Pick the best server using LatencySelector during every iteration.
     // Every iteration updates latency for a server. Verify if LatencySelector picks the best server in every iteration.
@@ -445,14 +387,6 @@ public class AdaptiveServerSelectorTest {
     String selectedServer = selector.select(_servers);
     assertTrue(_servers.contains(selectedServer), selectedServer);
 
-    List<String> candidateServers = new ArrayList<>(Arrays.asList("server2", "server3", "server1", "server4"));
-    serverRankingWithVal = selector.fetchServerRankingsWithScores(candidateServers);
-    assertEquals(serverRankingWithVal.size(), 4);
-    for (Pair<String, Double> entry : serverRankingWithVal) {
-      assertEquals(entry.getRight(), -1.0);
-    }
-
-
     // TEST 2: Populate all servers with equal numInFlightRequests and latencies.
     for (int ii = 0; ii < 10; ii++) {
       for (String server : _servers) {
@@ -478,13 +412,6 @@ public class AdaptiveServerSelectorTest {
 
     selectedServer = selector.select(_servers);
     assertEquals(selectedServer, _servers.get(0));
-
-    candidateServers = new ArrayList<>(Arrays.asList("server1", "server2"));
-    serverRankingWithVal = selector.fetchServerRankingsWithScores(candidateServers);
-    assertEquals(serverRankingWithVal.size(), 2);
-    for (Pair<String, Double> entry : serverRankingWithVal) {
-      assertEquals(entry.getRight(), serverRankingWithVal.get(0).getRight());
-    }
 
     // Test 3: Populate servers with unequal latencies and numInFlightRequests.
     for (int ii = 0; ii < _servers.size(); ii++) {
@@ -513,17 +440,6 @@ public class AdaptiveServerSelectorTest {
 
     selectedServer = selector.select(Arrays.asList("server3", "server4", "server2"));
     assertEquals(selectedServer, "server2");
-
-    candidateServers = new ArrayList<>(Arrays.asList("server1", "server2"));
-    serverRankingWithVal = selector.fetchServerRankingsWithScores(candidateServers);
-    assertEquals(serverRankingWithVal.size(), 2);
-    prevVal = 0.0;
-    for (Pair<String, Double> entry : serverRankingWithVal) {
-      String server = entry.getLeft();
-      double latency = entry.getRight();
-      assertTrue(prevVal <= latency, prevVal + " " + latency + " " + server);
-      prevVal = latency;
-    }
 
     // Test 4: Simulate server selection code. Pick the best server using HybridSelector during every iteration.
     // Every iteration updates latency and numInFlightRequests for a server. Verify if HybridSelector picks the best

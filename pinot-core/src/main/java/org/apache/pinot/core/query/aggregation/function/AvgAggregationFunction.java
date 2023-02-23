@@ -100,15 +100,13 @@ public class AvgAggregationFunction extends BaseSingleInputAggregationFunction<A
       double[] doubleValues = blockValSet.getDoubleValuesSV();
       if (nullBitmap.getCardinality() < length) {
         double sum = 0.0;
-        long count = 0L;
         // TODO: need to update the for-loop terminating condition to: i < length & i < doubleValues.length?
         for (int i = 0; i < length; i++) {
           if (!nullBitmap.contains(i)) {
             sum += doubleValues[i];
-            count++;
           }
         }
-        setAggregationResult(aggregationResultHolder, sum, count);
+        setAggregationResult(aggregationResultHolder, sum, length);
       }
       // Note: when all input values re null (nullBitmap.getCardinality() == values.length), avg is null. As a result,
       // we don't call setAggregationResult.

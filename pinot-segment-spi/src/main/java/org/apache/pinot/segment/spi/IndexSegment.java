@@ -77,20 +77,17 @@ public interface IndexSegment {
   ThreadSafeMutableRoaringBitmap getValidDocIds();
 
   /**
-   * Returns the record for the given document id. Virtual column values are not returned.
-   * <p>NOTE: don't use this method for high performance code. Use PinotSegmentRecordReader when reading multiple
-   * records from the same segment.
+   * Returns the record for the given document Id. Virtual column values are not returned.
+   * <p>NOTE: don't use this method for high performance code.
    *
-   * @param docId Document id
+   * @param docId Document Id
    * @param reuse Reusable buffer for the record
-   * @return Record for the given document id
+   * @return Record for the given document Id
    */
   GenericRow getRecord(int docId, GenericRow reuse);
 
   /**
    * Returns the value for the column at the document id. Returns byte[] for BYTES data type.
-   * <p>NOTE: don't use this method for high performance code. Use PinotSegmentColumnReader when reading multiple
-   * values from the same segment.
    */
   Object getValue(int docId, String column);
 

@@ -33,10 +33,12 @@ import org.apache.pinot.spi.utils.ArrayCopyUtils;
 public class MultiplicationTransformFunction extends BaseTransformFunction {
   public static final String FUNCTION_NAME = "mult";
 
-  private final List<TransformFunction> _transformFunctions = new ArrayList<>();
   private DataType _resultDataType;
   private double _literalDoubleProduct = 1.0;
   private BigDecimal _literalBigDecimalProduct = BigDecimal.ONE;
+  private List<TransformFunction> _transformFunctions = new ArrayList<>();
+  private double[] _doubleProducts;
+  private BigDecimal[] _bigDecimalProducts;
 
   @Override
   public String getName() {
@@ -56,8 +58,8 @@ public class MultiplicationTransformFunction extends BaseTransformFunction {
         LiteralTransformFunction literalTransformFunction = (LiteralTransformFunction) argument;
         DataType dataType = literalTransformFunction.getResultMetadata().getDataType();
         if (dataType == DataType.BIG_DECIMAL) {
-          _literalBigDecimalProduct =
-              _literalBigDecimalProduct.multiply(new BigDecimal(literalTransformFunction.getLiteral()));
+          _literalBigDecimalProduct = _literalBigDecimalProduct.multiply(
+              new BigDecimal(literalTransformFunction.getLiteral()));
           _resultDataType = DataType.BIG_DECIMAL;
         } else {
           _literalDoubleProduct *= Double.parseDouble(((LiteralTransformFunction) argument).getLiteral());
@@ -88,42 +90,45 @@ public class MultiplicationTransformFunction extends BaseTransformFunction {
   @Override
   public double[] transformToDoubleValuesSV(ProjectionBlock projectionBlock) {
     int length = projectionBlock.getNumDocs();
-    if (_doubleValuesSV == null) {
-      _doubleValuesSV = new double[length];
+
+    if (_doubleProducts == null || _doubleProducts.length < length) {
+      _doubleProducts = new double[length];
     }
+
     if (_resultDataType == DataType.BIG_DECIMAL) {
       BigDecimal[] values = transformToBigDecimalValuesSV(projectionBlock);
-      ArrayCopyUtils.copy(values, _doubleValuesSV, length);
+      ArrayCopyUtils.copy(values, _doubleProducts, length);
     } else {
-      Arrays.fill(_doubleValuesSV, 0, length, _literalDoubleProduct);
+      Arrays.fill(_doubleProducts, 0, length, _literalDoubleProduct);
       for (TransformFunction transformFunction : _transformFunctions) {
         double[] values = transformFunction.transformToDoubleValuesSV(projectionBlock);
         for (int i = 0; i < length; i++) {
-          _doubleValuesSV[i] *= values[i];
+          _doubleProducts[i] *= values[i];
         }
       }
     }
-    return _doubleValuesSV;
+    return _doubleProducts;
   }
 
   @Override
   public BigDecimal[] transformToBigDecimalValuesSV(ProjectionBlock projectionBlock) {
     int length = projectionBlock.getNumDocs();
-    if (_bigDecimalValuesSV == null) {
-      _bigDecimalValuesSV = new BigDecimal[length];
+    if (_bigDecimalProducts == null || _bigDecimalProducts.length < length) {
+      _bigDecimalProducts = new BigDecimal[length];
     }
+
     if (_resultDataType == DataType.DOUBLE) {
       double[] values = transformToDoubleValuesSV(projectionBlock);
-      ArrayCopyUtils.copy(values, _bigDecimalValuesSV, length);
+      ArrayCopyUtils.copy(values, _bigDecimalProducts, length);
     } else {
-      Arrays.fill(_bigDecimalValuesSV, 0, length, _literalBigDecimalProduct);
+      Arrays.fill(_bigDecimalProducts, 0, length, _literalBigDecimalProduct);
       for (TransformFunction transformFunction : _transformFunctions) {
         BigDecimal[] values = transformFunction.transformToBigDecimalValuesSV(projectionBlock);
         for (int i = 0; i < length; i++) {
-          _bigDecimalValuesSV[i] = _bigDecimalValuesSV[i].multiply(values[i]);
+          _bigDecimalProducts[i] = _bigDecimalProducts[i].multiply(values[i]);
         }
       }
     }
-    return _bigDecimalValuesSV;
+    return _bigDecimalProducts;
   }
 }

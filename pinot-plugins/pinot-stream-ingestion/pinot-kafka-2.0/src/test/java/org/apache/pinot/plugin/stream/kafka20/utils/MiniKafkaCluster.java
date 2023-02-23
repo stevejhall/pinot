@@ -53,7 +53,8 @@ public final class MiniKafkaCluster implements Closeable {
       throws IOException, InterruptedException {
     _zkServer = new EmbeddedZooKeeper();
     int kafkaServerPort = getAvailablePort();
-    KafkaConfig kafkaBrokerConfig = new KafkaConfig(createBrokerConfig(brokerId, kafkaServerPort));
+    Map<String, String> brokerConfig = createBrokerConfig(brokerId, kafkaServerPort);
+    KafkaConfig kafkaBrokerConfig = new KafkaConfig(brokerConfig);
     _kafkaServer = new KafkaServer(kafkaBrokerConfig, Time.SYSTEM, Option.empty(), false);
     _kafkaServerAddress = "localhost:" + kafkaServerPort;
     Properties kafkaClientConfig = new Properties();
@@ -71,8 +72,8 @@ public final class MiniKafkaCluster implements Closeable {
     }
   }
 
-  private Properties createBrokerConfig(String brokerId, int port) {
-    Properties props = new Properties();
+  private Map<String, String> createBrokerConfig(String brokerId, int port) {
+    Map<String, String> props = new HashMap<>();
     props.put("broker.id", brokerId);
     // We need to explicitly set the network interface we want to let Kafka bind to.
     // By default, it will bind to all the network interfaces, which might not be accessible always

@@ -31,7 +31,7 @@
 
   <groupId>org.apache.pinot</groupId>
   <artifactId>pinot</artifactId>
-  <version>0.13.0-SNAPSHOT</version>
+  <version>0.12.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Pinot</name>
   <description>A realtime distributed OLAP datastore</description>
@@ -126,7 +126,7 @@
     <helix.version>1.0.4</helix.version>
     <zkclient.version>0.7</zkclient.version>
     <jackson.version>2.12.7</jackson.version>
-    <zookeeper.version>3.6.3</zookeeper.version>
+    <zookeeper.version>3.5.10</zookeeper.version>
     <async-http-client.version>2.12.3</async-http-client.version>
     <jersey.version>2.35</jersey.version>
     <grizzly.version>2.4.4</grizzly.version>
@@ -135,7 +135,6 @@
     <hadoop.version>2.10.1</hadoop.version>
     <antlr.version>4.6</antlr.version>
     <jsonpath.version>2.7.0</jsonpath.version>
-    <jsonsmart.version>2.4.7</jsonsmart.version>
     <quartz.version>2.3.2</quartz.version>
     <calcite.version>1.29.0</calcite.version>
     <lucene.version>8.2.0</lucene.version>
@@ -155,7 +154,7 @@
     <netty.version>4.1.79.Final</netty.version>
     <reactivestreams.version>1.0.3</reactivestreams.version>
     <jts.version>1.16.1</jts.version>
-    <h3.version>4.1.1</h3.version>
+    <h3.version>4.0.0</h3.version>
     <jmh.version>1.26</jmh.version>
     <audienceannotations.version>0.13.0</audienceannotations.version>
 
@@ -167,13 +166,14 @@
     To change kafka connector dependency, we only need to update this version number config.
     TODO: figure out a way to inject kafka dependency instead of explicitly setting the kafka module dependency -->
     <kafka.version>2.0</kafka.version>
-    <protobuf.version>3.22.0</protobuf.version>
-    <grpc.version>1.53.0</grpc.version>
-    <confluent.version>5.5.3</confluent.version>
+    <protobuf.version>3.19.2</protobuf.version>
+    <grpc.version>1.41.0</grpc.version>
+    <confluent.version>6.1.8</confluent.version>
+    <kafka.clients.version>6.1.8-ccs</kafka.clients.version>
 
     <!-- Checkstyle violation prop.-->
     <checkstyle.violation.severity>warning</checkstyle.violation.severity>
-    <checkstyle.fail.on.violation>true</checkstyle.fail.on.violation>
+    <checkstyle.fail.on.violation>false</checkstyle.fail.on.violation>
 
     <!-- Configuration for Packaging -->
     <shade.prefix>org.apache.pinot.shaded</shade.prefix>
@@ -229,7 +229,7 @@
       <activation>
         <property>
           <name>jdk.version</name>
-          <value>8</value>
+          <value>11</value>
         </property>
       </activation>
       <build>
@@ -240,8 +240,8 @@
               <artifactId>maven-compiler-plugin</artifactId>
               <version>3.8.0</version>
               <configuration>
-                <source>8</source>
-                <target>8</target>
+                <source>1.11</source>
+                <target>1.11</target>
                 <fork>true</fork>
                 <encoding>${project.build.sourceEncoding}</encoding>
               </configuration>
@@ -443,7 +443,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.38</version>
+        <version>0.9.28</version>
       </dependency>
       <dependency>
         <groupId>com.101tec</groupId>
@@ -736,6 +736,10 @@
             <groupId>org.apache.yetus</groupId>
             <artifactId>audience-annotations</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -886,7 +890,7 @@
       <dependency>
         <groupId>org.apache.datasketches</groupId>
         <artifactId>datasketches-java</artifactId>
-        <version>3.3.0</version>
+        <version>1.2.0-incubating</version>
       </dependency>
       <dependency>
         <groupId>com.tdunning</groupId>
@@ -902,11 +906,6 @@
         <groupId>com.jayway.jsonpath</groupId>
         <artifactId>json-path</artifactId>
         <version>${jsonpath.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>net.minidev</groupId>
-        <artifactId>json-smart</artifactId>
-        <version>${jsonsmart.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.calcite</groupId>
@@ -1204,11 +1203,16 @@
         <artifactId>h3</artifactId>
         <version>${h3.version}</version>
       </dependency>
-
       <dependency>
-        <groupId>com.github.seancfoley</groupId>
-        <artifactId>ipaddress</artifactId>
-        <version>5.3.4</version>
+        <groupId>org.apache.pinot</groupId>
+        <artifactId>pinot-confluent-avro</artifactId>
+        <version>${project.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>io.swagger</groupId>
+            <artifactId>swagger-annotations</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -1530,7 +1534,7 @@
       <plugin>
         <groupId>com.diffplug.spotless</groupId>
         <artifactId>spotless-maven-plugin</artifactId>
-        <version>2.28.0</version>
+        <version>2.9.0</version>
         <executions>
           <execution>
             <phase>verify</phase>
@@ -1570,7 +1574,8 @@
             <exclude>**/*.generated</exclude>
             <exclude>**/*.json</exclude>
             <exclude>**/*.schema</exclude>
-
+            <exclude>**/*.yml</exclude>
+            <exclude>**/*.yaml</exclude>
             <!-- JDBC Drivers -->
             <exclude>**/java.sql.*</exclude>
 
@@ -1594,6 +1599,7 @@
             <exclude>**/*.v2</exclude>
 
             <!-- Auto-generated target directories -->
+            <exclude>build/**</exclude>
             <exclude>target/**</exclude>
             <exclude>pinot-*/target/**</exclude>
 
@@ -1623,6 +1629,8 @@
             <exclude>**/.project</exclude>
             <exclude>**/.classpath</exclude>
             <exclude>.externalToolBuilders/**</exclude>
+            <exclude>**/.run/**</exclude>
+            <exclude>**/NOTICE</exclude>
           </excludes>
           <mapping>
             <java>JAVADOC_STYLE</java>
@@ -1674,14 +1682,18 @@
 
             <!-- Exclude build targets -->
             <exclude>**/target/**</exclude>
+            <exclude>**/build/**</exclude>
 
             <!-- Text and log files -->
             <exclude>**/*.txt</exclude>
             <exclude>**/*.log</exclude>
+            <exclude>**/*.log*</exclude>
             <exclude>**/*.list</exclude>
             <exclude>**/*.out</exclude>
             <exclude>**/*.generated</exclude>
             <exclude>**/*.json</exclude>
+            <exclude>**/*.yml</exclude>
+            <exclude>**/*.yaml</exclude>
             <exclude>**/*.schema</exclude>
 
             <!-- JDBC Drivers -->
@@ -1722,6 +1734,7 @@
             <exclude>**/.project</exclude>
             <exclude>**/.classpath</exclude>
             <exclude>.externalToolBuilders/**</exclude>
+            <exclude>**/*.xml</exclude>
 
             <!-- Docker and Kubernetes (not part of the distribution) -->
             <exclude>kubernetes/**</exclude>
@@ -1756,11 +1769,6 @@
         </executions>
       </plugin>
       <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>versions-maven-plugin</artifactId>
-        <version>2.13.0</version>
-      </plugin>
-      <plugin>
         <artifactId>maven-shade-plugin</artifactId>
         <version>3.2.1</version>
         <configuration>
@@ -1784,7 +1792,8 @@
           </filters>
         </configuration>
       </plugin>
-      <!-- Include apache LICENSE, NOTICE files for jar resource bundle -->
+      <!-- Include apache LICENSE, NOTICE files for jar resource bundle
+           Build fails at :pinot-distribution without this plugin  -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-remote-resources-plugin</artifactId>

@@ -48,11 +48,6 @@ public class FilterTransformer implements RecordTransformer {
   }
 
   @Override
-  public boolean isNoOp() {
-    return _evaluator == null;
-  }
-
-  @Override
   public GenericRow transform(GenericRow record) {
     if (_evaluator != null) {
       try {

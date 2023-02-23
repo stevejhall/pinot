@@ -25,7 +25,12 @@ import org.apache.pinot.controller.ControllerConf;
 import org.apache.pinot.spi.utils.ReadMode;
 
 
-public class ExactlyOnceKafkaRealtimeClusterIntegrationTest extends BaseRealtimeClusterIntegrationTest {
+public class ExactlyOnceKafkaRealtimeClusterIntegrationTest extends RealtimeClusterIntegrationTest {
+
+  @Override
+  protected boolean useLlc() {
+    return true;
+  }
 
   @Override
   protected boolean useKafkaTransaction() {

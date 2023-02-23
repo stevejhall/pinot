@@ -20,37 +20,60 @@ package org.apache.pinot.core.query.config;
 
 import org.apache.commons.configuration.ConfigurationException;
 import org.apache.pinot.spi.env.PinotConfiguration;
-import org.apache.pinot.spi.utils.CommonConstants.Server;
 
 
 /**
  * Config for QueryExecutor.
+ *
+ *
  */
 public class QueryExecutorConfig {
+
+  // Prefix key of Query Pruner
   public static final String QUERY_PRUNER = "pruner";
-  public static final String PLAN_MAKER_CLASS = "plan.maker.class";
+  // Prefix key of Query Planner
+  public static final String QUERY_PLANNER = "queryPlanner";
+  // Prefix key of TimeOut
   public static final String TIME_OUT = "timeout";
 
-  private final PinotConfiguration _config;
+  private static final String[] REQUIRED_KEYS = {};
+
+  private PinotConfiguration _queryExecutorConfig = null;
+  private SegmentPrunerConfig _segmentPrunerConfig;
+  private QueryPlannerConfig _queryPlannerConfig;
+  private final long _timeOutMs;
 
   public QueryExecutorConfig(PinotConfiguration config)
       throws ConfigurationException {
-    _config = config;
+    _queryExecutorConfig = config;
+    checkRequiredKeys();
+    _segmentPrunerConfig = new SegmentPrunerConfig(_queryExecutorConfig.subset(QUERY_PRUNER));
+    _queryPlannerConfig = new QueryPlannerConfig(_queryExecutorConfig.subset(QUERY_PLANNER));
+    _timeOutMs = _queryExecutorConfig.getProperty(TIME_OUT, -1);
+  }
+
+  private void checkRequiredKeys()
+      throws ConfigurationException {
+    for (String keyString : REQUIRED_KEYS) {
+      if (!_queryExecutorConfig.containsKey(keyString)) {
+        throw new ConfigurationException("Cannot find required key : " + keyString);
+      }
+    }
   }
 
   public PinotConfiguration getConfig() {
-    return _config;
+    return _queryExecutorConfig;
   }
 
   public SegmentPrunerConfig getPrunerConfig() {
-    return new SegmentPrunerConfig(_config.subset(QUERY_PRUNER));
+    return _segmentPrunerConfig;
   }
 
-  public String getPlanMakerClass() {
-    return _config.getProperty(PLAN_MAKER_CLASS, Server.DEFAULT_QUERY_EXECUTOR_PLAN_MAKER_CLASS);
+  public QueryPlannerConfig getQueryPlannerConfig() {
+    return _queryPlannerConfig;
   }
 
   public long getTimeOut() {
-    return _config.getProperty(TIME_OUT, Server.DEFAULT_QUERY_EXECUTOR_TIMEOUT_MS);
+    return _timeOutMs;
   }
 }

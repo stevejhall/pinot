@@ -37,7 +37,6 @@ import org.apache.lucene.store.FSDirectory;
 import org.apache.pinot.segment.local.indexsegment.immutable.ImmutableSegmentLoader;
 import org.apache.pinot.segment.local.segment.creator.impl.text.LuceneTextIndexCreator;
 import org.apache.pinot.segment.local.segment.index.column.PhysicalColumnIndexContainer;
-import org.apache.pinot.segment.local.segment.store.TextIndexUtils;
 import org.apache.pinot.segment.spi.V1Constants;
 import org.apache.pinot.segment.spi.index.reader.TextIndexReader;
 import org.apache.pinot.segment.spi.memory.PinotDataBuffer;
@@ -94,10 +93,7 @@ public class LuceneTextIndexReader implements TextIndexReader {
       // TODO: consider using a threshold of num docs per segment to decide between building
       // mapping file upfront on segment load v/s on-the-fly during query processing
       _docIdTranslator = new DocIdTranslator(indexDir, _column, numDocs, _indexSearcher);
-      _standardAnalyzer = TextIndexUtils.getStandardAnalyzerWithCustomizedStopWords(
-          TextIndexUtils.extractStopWordsInclude(textIndexProperties),
-          TextIndexUtils.extractStopWordsExclude(textIndexProperties)
-      );
+      _standardAnalyzer = new StandardAnalyzer(LuceneTextIndexCreator.ENGLISH_STOP_WORDS_SET);
     } catch (Exception e) {
       LOGGER
           .error("Failed to instantiate Lucene text index reader for column {}, exception {}", column, e.getMessage());

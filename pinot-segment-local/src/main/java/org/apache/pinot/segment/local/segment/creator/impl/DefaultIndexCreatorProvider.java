@@ -28,7 +28,6 @@ import org.apache.pinot.segment.local.segment.creator.impl.bloom.OnHeapGuavaBloo
 import org.apache.pinot.segment.local.segment.creator.impl.fwd.MultiValueFixedByteRawIndexCreator;
 import org.apache.pinot.segment.local.segment.creator.impl.fwd.MultiValueUnsortedForwardIndexCreator;
 import org.apache.pinot.segment.local.segment.creator.impl.fwd.MultiValueVarByteRawIndexCreator;
-import org.apache.pinot.segment.local.segment.creator.impl.fwd.NoOpForwardIndexCreator;
 import org.apache.pinot.segment.local.segment.creator.impl.fwd.SingleValueFixedByteRawIndexCreator;
 import org.apache.pinot.segment.local.segment.creator.impl.fwd.SingleValueSortedForwardIndexCreator;
 import org.apache.pinot.segment.local.segment.creator.impl.fwd.SingleValueUnsortedForwardIndexCreator;
@@ -75,7 +74,6 @@ public final class DefaultIndexCreatorProvider implements IndexCreatorProvider {
   public ForwardIndexCreator newForwardIndexCreator(IndexCreationContext.Forward context)
       throws Exception {
     if (!context.hasDictionary()) {
-      // Dictionary disabled columns
       boolean deriveNumDocsPerChunk =
           shouldDeriveNumDocsPerChunk(context.getFieldSpec().getName(), context.getColumnProperties());
       int writerVersion = getRawIndexWriterVersion(context.getFieldSpec().getName(), context.getColumnProperties());
@@ -90,25 +88,17 @@ public final class DefaultIndexCreatorProvider implements IndexCreatorProvider {
             context.getMaxRowLengthInBytes());
       }
     } else {
-      // Dictionary enabled columns
-      if (context.forwardIndexDisabled() && !context.isSorted()) {
-        // Forward index disabled columns which aren't sorted
-        // Sorted columns treat this option as a no-op
-        return new NoOpForwardIndexCreator(context.getFieldSpec().isSingleValueField());
-      } else {
-        // Forward index enabled columns
-        if (context.getFieldSpec().isSingleValueField()) {
-          if (context.isSorted()) {
-            return new SingleValueSortedForwardIndexCreator(context.getIndexDir(), context.getFieldSpec().getName(),
-                context.getCardinality());
-          } else {
-            return new SingleValueUnsortedForwardIndexCreator(context.getIndexDir(), context.getFieldSpec().getName(),
-                context.getCardinality(), context.getTotalDocs());
-          }
+      if (context.getFieldSpec().isSingleValueField()) {
+        if (context.isSorted()) {
+          return new SingleValueSortedForwardIndexCreator(context.getIndexDir(), context.getFieldSpec().getName(),
+              context.getCardinality());
         } else {
-          return new MultiValueUnsortedForwardIndexCreator(context.getIndexDir(), context.getFieldSpec().getName(),
-              context.getCardinality(), context.getTotalDocs(), context.getTotalNumberOfEntries());
+          return new SingleValueUnsortedForwardIndexCreator(context.getIndexDir(), context.getFieldSpec().getName(),
+              context.getCardinality(), context.getTotalDocs());
         }
+      } else {
+        return new MultiValueUnsortedForwardIndexCreator(context.getIndexDir(), context.getFieldSpec().getName(),
+            context.getCardinality(), context.getTotalDocs(), context.getTotalNumberOfEntries());
       }
     }
   }
@@ -132,10 +122,8 @@ public final class DefaultIndexCreatorProvider implements IndexCreatorProvider {
         "Json index is currently only supported on single-value columns");
     Preconditions.checkState(context.getFieldSpec().getDataType().getStoredType() == FieldSpec.DataType.STRING,
         "Json index is currently only supported on STRING columns");
-    return context.isOnHeap() ? new OnHeapJsonIndexCreator(context.getIndexDir(), context.getFieldSpec().getName(),
-        context.getJsonIndexConfig())
-        : new OffHeapJsonIndexCreator(context.getIndexDir(), context.getFieldSpec().getName(),
-            context.getJsonIndexConfig());
+    return context.isOnHeap() ? new OnHeapJsonIndexCreator(context.getIndexDir(), context.getFieldSpec().getName())
+        : new OffHeapJsonIndexCreator(context.getIndexDir(), context.getFieldSpec().getName());
   }
 
   @Override
@@ -161,7 +149,7 @@ public final class DefaultIndexCreatorProvider implements IndexCreatorProvider {
         return new NativeTextIndexCreator(context.getFieldSpec().getName(), context.getIndexDir());
       } else {
         return new LuceneTextIndexCreator(context.getFieldSpec().getName(), context.getIndexDir(),
-                context.isCommitOnClose(), context.getStopWordsInclude(), context.getStopWordsExclude());
+                context.isCommitOnClose());
       }
     }
   }

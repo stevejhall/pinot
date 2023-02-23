@@ -20,7 +20,6 @@ package org.apache.pinot.segment.local.segment.loader;
 
 import java.net.URI;
 import org.apache.pinot.segment.local.loader.DefaultSegmentDirectoryLoader;
-import org.apache.pinot.segment.local.loader.TierBasedSegmentDirectoryLoader;
 import org.apache.pinot.segment.spi.loader.SegmentDirectoryLoader;
 import org.apache.pinot.segment.spi.loader.SegmentDirectoryLoaderContext;
 import org.apache.pinot.segment.spi.loader.SegmentDirectoryLoaderRegistry;
@@ -40,11 +39,6 @@ public class SegmentDirectoryLoaderRegistryTest {
     defaultSegmentDirectoryLoader = SegmentDirectoryLoaderRegistry.getSegmentDirectoryLoader("default");
     Assert.assertEquals(defaultSegmentDirectoryLoader.getClass().getSimpleName(),
         DefaultSegmentDirectoryLoader.class.getSimpleName());
-
-    SegmentDirectoryLoader tierBasedSegmentDirectoryLoader =
-        SegmentDirectoryLoaderRegistry.getSegmentDirectoryLoader("tierBased");
-    Assert.assertEquals(tierBasedSegmentDirectoryLoader.getClass().getSimpleName(),
-        TierBasedSegmentDirectoryLoader.class.getSimpleName());
 
     Assert.assertNull(SegmentDirectoryLoaderRegistry.getSegmentDirectoryLoader("custom"));
     SegmentDirectoryLoaderRegistry.setSegmentDirectoryLoader("custom", new CustomSegmentDirectoryLoader());

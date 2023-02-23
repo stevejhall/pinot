@@ -20,30 +20,27 @@ package org.apache.pinot.core.operator;
 
 import java.util.Collections;
 import java.util.List;
-import org.apache.commons.lang.StringUtils;
+import java.util.Map;
+import org.apache.pinot.common.datatable.DataTable;
 import org.apache.pinot.common.datatable.DataTable.MetadataKey;
+import org.apache.pinot.common.request.context.ThreadTimer;
 import org.apache.pinot.core.common.Operator;
 import org.apache.pinot.core.operator.blocks.InstanceResponseBlock;
 import org.apache.pinot.core.operator.blocks.results.BaseResultsBlock;
-import org.apache.pinot.core.operator.blocks.results.ExceptionResultsBlock;
 import org.apache.pinot.core.operator.combine.BaseCombineOperator;
 import org.apache.pinot.core.query.request.context.QueryContext;
 import org.apache.pinot.segment.spi.FetchContext;
 import org.apache.pinot.segment.spi.IndexSegment;
-import org.apache.pinot.spi.accounting.ThreadResourceUsageProvider;
-import org.apache.pinot.spi.exception.EarlyTerminationException;
-import org.apache.pinot.spi.exception.QueryCancelledException;
-import org.apache.pinot.spi.trace.Tracing;
 
 
 public class InstanceResponseOperator extends BaseOperator<InstanceResponseBlock> {
   private static final String EXPLAIN_NAME = "INSTANCE_RESPONSE";
 
-  protected final BaseCombineOperator<?> _combineOperator;
-  protected final List<IndexSegment> _indexSegments;
-  protected final List<FetchContext> _fetchContexts;
-  protected final int _fetchContextSize;
-  protected final QueryContext _queryContext;
+  private final BaseCombineOperator<?> _combineOperator;
+  private final List<IndexSegment> _indexSegments;
+  private final List<FetchContext> _fetchContexts;
+  private final int _fetchContextSize;
+  private final QueryContext _queryContext;
 
   public InstanceResponseOperator(BaseCombineOperator<?> combineOperator, List<IndexSegment> indexSegments,
       List<FetchContext> fetchContexts, QueryContext queryContext) {
@@ -81,13 +78,13 @@ public class InstanceResponseOperator extends BaseOperator<InstanceResponseBlock
 
   @Override
   protected InstanceResponseBlock getNextBlock() {
-    if (ThreadResourceUsageProvider.isThreadCpuTimeMeasurementEnabled()) {
+    if (ThreadTimer.isThreadCpuTimeMeasurementEnabled()) {
       long startWallClockTimeNs = System.nanoTime();
 
-      ThreadResourceUsageProvider mainThreadResourceUsageProvider = new ThreadResourceUsageProvider();
+      ThreadTimer mainThreadTimer = new ThreadTimer();
       BaseResultsBlock resultsBlock = getCombinedResults();
-      InstanceResponseBlock instanceResponseBlock = new InstanceResponseBlock(resultsBlock, _queryContext);
-      long mainThreadCpuTimeNs = mainThreadResourceUsageProvider.getThreadTimeNs();
+      InstanceResponseBlock instanceResponseBlock = new InstanceResponseBlock(getDataTable(resultsBlock));
+      long mainThreadCpuTimeNs = mainThreadTimer.getThreadTimeNs();
 
       long totalWallClockTimeNs = System.nanoTime() - startWallClockTimeNs;
       /*
@@ -102,13 +99,14 @@ public class InstanceResponseOperator extends BaseOperator<InstanceResponseBlock
               numServerThreads);
 
       long threadCpuTimeNs = mainThreadCpuTimeNs + multipleThreadCpuTimeNs;
-      instanceResponseBlock.addMetadata(MetadataKey.THREAD_CPU_TIME_NS.getName(), String.valueOf(threadCpuTimeNs));
-      instanceResponseBlock.addMetadata(MetadataKey.SYSTEM_ACTIVITIES_CPU_TIME_NS.getName(),
+      Map<String, String> responseMetaData = instanceResponseBlock.getInstanceResponseDataTable().getMetadata();
+      responseMetaData.put(MetadataKey.THREAD_CPU_TIME_NS.getName(), String.valueOf(threadCpuTimeNs));
+      responseMetaData.put(MetadataKey.SYSTEM_ACTIVITIES_CPU_TIME_NS.getName(),
           String.valueOf(systemActivitiesCpuTimeNs));
 
       return instanceResponseBlock;
     } else {
-      return new InstanceResponseBlock(getCombinedResults(), _queryContext);
+      return new InstanceResponseBlock(getDataTable(getCombinedResults()));
     }
   }
 
@@ -116,23 +114,26 @@ public class InstanceResponseOperator extends BaseOperator<InstanceResponseBlock
     try {
       prefetchAll();
       return _combineOperator.nextBlock();
-    } catch (EarlyTerminationException e) {
-      Exception killedErrorMsg = Tracing.getThreadAccountant().getErrorStatus();
-      return new ExceptionResultsBlock(new QueryCancelledException(
-          "Cancelled while combining results" + (killedErrorMsg == null ? StringUtils.EMPTY : " " + killedErrorMsg),
-          e));
     } finally {
       releaseAll();
     }
   }
 
-  protected void prefetchAll() {
+  private DataTable getDataTable(BaseResultsBlock resultsBlock) {
+    try {
+      return resultsBlock.getDataTable(_queryContext);
+    } catch (Exception e) {
+      throw new RuntimeException("Caught exception while building data table", e);
+    }
+  }
+
+  private void prefetchAll() {
     for (int i = 0; i < _fetchContextSize; i++) {
       _indexSegments.get(i).prefetch(_fetchContexts.get(i));
     }
   }
 
-  protected void releaseAll() {
+  private void releaseAll() {
     for (int i = 0; i < _fetchContextSize; i++) {
       _indexSegments.get(i).release(_fetchContexts.get(i));
     }

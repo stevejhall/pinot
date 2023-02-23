@@ -21,11 +21,14 @@ package org.apache.pinot.plugin.filesystem.test;
 import com.azure.core.http.rest.PagedIterable;
 import com.azure.core.http.rest.SimpleResponse;
 import com.azure.core.util.Context;
+import com.azure.storage.blob.BlobClient;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.specialized.BlobInputStream;
 import com.azure.storage.file.datalake.DataLakeDirectoryClient;
 import com.azure.storage.file.datalake.DataLakeFileClient;
 import com.azure.storage.file.datalake.DataLakeFileSystemClient;
 import com.azure.storage.file.datalake.DataLakeServiceClient;
-import com.azure.storage.file.datalake.models.DataLakeFileOpenInputStreamResult;
 import com.azure.storage.file.datalake.models.DataLakeStorageException;
 import com.azure.storage.file.datalake.models.PathItem;
 import com.azure.storage.file.datalake.models.PathProperties;
@@ -36,11 +39,10 @@ import java.net.URISyntaxException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.stream.Stream;
 import org.apache.pinot.plugin.filesystem.ADLSGen2PinotFS;
-import org.apache.pinot.plugin.filesystem.AzurePinotFSUtil;
 import org.apache.pinot.spi.env.PinotConfiguration;
 import org.apache.pinot.spi.filesystem.FileMetadata;
 import org.mockito.Mock;
@@ -63,13 +65,17 @@ public class ADLSGen2PinotFSTest {
   @Mock
   private DataLakeDirectoryClient _mockDirectoryClient;
   @Mock
+  private BlobServiceClient _mockBlobServiceClient;
+  @Mock
+  private BlobContainerClient _mockBlobContainerClient;
+  @Mock
+  private BlobClient _mockBlobClient;
+  @Mock
+  private BlobInputStream _mockBlobInputStream;
+  @Mock
   private DataLakeServiceClient _mockServiceClient;
   @Mock
   private DataLakeFileClient _mockFileClient;
-  @Mock
-  private DataLakeFileOpenInputStreamResult _mockFileOpenInputStreamResult;
-  @Mock
-  private InputStream _mockInputStream;
   @Mock
   private DataLakeStorageException _mockDataLakeStorageException;
   @Mock
@@ -89,8 +95,8 @@ public class ADLSGen2PinotFSTest {
   @BeforeMethod
   public void setup()
       throws URISyntaxException {
-    MockitoAnnotations.openMocks(this);
-    _adlsGen2PinotFsUnderTest = new ADLSGen2PinotFS(_mockFileSystemClient);
+    MockitoAnnotations.initMocks(this);
+    _adlsGen2PinotFsUnderTest = new ADLSGen2PinotFS(_mockFileSystemClient, _mockBlobServiceClient);
     _mockURI = new URI("mock://mock");
   }
 
@@ -98,7 +104,7 @@ public class ADLSGen2PinotFSTest {
   public void tearDown() {
     verifyNoMoreInteractions(_mockDataLakeStorageException, _mockServiceClient, _mockFileSystemClient,
         _mockSimpleResponse, _mockDirectoryClient, _mockPathItem, _mockPagedIterable, _mockPathProperties,
-        _mockFileClient, _mockFileOpenInputStreamResult, _mockInputStream);
+        _mockFileClient, _mockBlobContainerClient, _mockBlobClient, _mockBlobServiceClient, _mockBlobInputStream);
   }
 
   @Test(expectedExceptions = NullPointerException.class)
@@ -189,7 +195,7 @@ public class ADLSGen2PinotFSTest {
   public void testListFiles()
       throws IOException {
     when(_mockFileSystemClient.listPaths(any(), any())).thenReturn(_mockPagedIterable);
-    when(_mockPagedIterable.stream()).thenReturn(Stream.of(_mockPathItem));
+    when(_mockPagedIterable.stream()).thenReturn(Collections.singletonList(_mockPathItem).stream());
     when(_mockPathItem.getName()).thenReturn("foo");
 
     String[] actual = _adlsGen2PinotFsUnderTest.listFiles(_mockURI, true);
@@ -204,7 +210,7 @@ public class ADLSGen2PinotFSTest {
   public void testListFilesWithMetadata()
       throws IOException {
     when(_mockFileSystemClient.listPaths(any(), any())).thenReturn(_mockPagedIterable);
-    when(_mockPagedIterable.stream()).thenReturn(Stream.of(_mockPathItem));
+    when(_mockPagedIterable.stream()).thenReturn(Collections.singletonList(_mockPathItem).stream());
     when(_mockPathItem.getName()).thenReturn("foo");
     when(_mockPathItem.isDirectory()).thenReturn(false);
     when(_mockPathItem.getContentLength()).thenReturn(1024L);
@@ -262,7 +268,7 @@ public class ADLSGen2PinotFSTest {
     when(_mockDirectoryClient.getProperties()).thenReturn(_mockPathProperties);
     when(_mockPathProperties.getMetadata()).thenReturn(metadata);
     when(_mockFileSystemClient.listPaths(any(), any())).thenReturn(_mockPagedIterable);
-    when(_mockPagedIterable.stream()).thenReturn(Stream.of(_mockPathItem));
+    when(_mockPagedIterable.stream()).thenReturn(Collections.singletonList(_mockPathItem).stream());
     when(_mockPathItem.getName()).thenReturn("foo");
     when(_mockFileSystemClient.deleteDirectoryWithResponse(eq(""), eq(true), eq(null), eq(null), eq(Context.NONE)))
         .thenReturn(_mockSimpleResponse);
@@ -352,7 +358,8 @@ public class ADLSGen2PinotFSTest {
   }
 
   @Test
-  public void testExistsException() {
+  public void testExistsException()
+      throws IOException {
     when(_mockFileSystemClient.getDirectoryClient(any())).thenReturn(_mockDirectoryClient);
     when(_mockDirectoryClient.getProperties()).thenThrow(_mockDataLakeStorageException);
     when(_mockDataLakeStorageException.getStatusCode()).thenReturn(123);
@@ -434,15 +441,17 @@ public class ADLSGen2PinotFSTest {
   @Test
   public void open()
       throws IOException {
-    when(_mockFileSystemClient.getFileClient(any())).thenReturn(_mockFileClient);
-    when(_mockFileClient.openInputStream()).thenReturn(_mockFileOpenInputStreamResult);
-    when(_mockFileOpenInputStreamResult.getInputStream()).thenReturn(_mockInputStream);
+    when(_mockFileSystemClient.getFileSystemName()).thenReturn(MOCK_FILE_SYSTEM_NAME);
+    when(_mockBlobServiceClient.getBlobContainerClient(MOCK_FILE_SYSTEM_NAME)).thenReturn(_mockBlobContainerClient);
+    when(_mockBlobContainerClient.getBlobClient(any())).thenReturn(_mockBlobClient);
+    when(_mockBlobClient.openInputStream()).thenReturn(_mockBlobInputStream);
 
     InputStream actual = _adlsGen2PinotFsUnderTest.open(_mockURI);
-    Assert.assertEquals(actual, _mockInputStream);
+    Assert.assertEquals(actual, _mockBlobInputStream);
 
-    verify(_mockFileSystemClient).getFileClient(AzurePinotFSUtil.convertUriToUrlEncodedAzureStylePath(_mockURI));
-    verify(_mockFileClient).openInputStream();
-    verify(_mockFileOpenInputStreamResult).getInputStream();
+    verify(_mockFileSystemClient).getFileSystemName();
+    verify(_mockBlobServiceClient).getBlobContainerClient(MOCK_FILE_SYSTEM_NAME);
+    verify(_mockBlobContainerClient).getBlobClient(any());
+    verify(_mockBlobClient).openInputStream();
   }
 }

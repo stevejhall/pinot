@@ -35,12 +35,11 @@ import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.io.FileUtils;
 import org.apache.helix.HelixManager;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
+import org.apache.pinot.common.datatable.DataTable;
 import org.apache.pinot.common.metrics.ServerMetrics;
 import org.apache.pinot.common.request.InstanceRequest;
 import org.apache.pinot.core.data.manager.InstanceDataManager;
 import org.apache.pinot.core.data.manager.offline.TableDataManagerProvider;
-import org.apache.pinot.core.operator.blocks.InstanceResponseBlock;
-import org.apache.pinot.core.operator.blocks.results.AggregationResultsBlock;
 import org.apache.pinot.core.query.executor.QueryExecutor;
 import org.apache.pinot.core.query.executor.ServerQueryExecutorV1Impl;
 import org.apache.pinot.core.query.request.ServerQueryRequest;
@@ -65,7 +64,6 @@ import org.apache.pinot.spi.env.PinotConfiguration;
 import org.apache.pinot.spi.metrics.PinotMetricUtils;
 import org.apache.pinot.spi.utils.ReadMode;
 import org.apache.pinot.spi.utils.builder.TableConfigBuilder;
-import org.apache.pinot.spi.utils.builder.TableNameBuilder;
 import org.apache.pinot.sql.parsers.CalciteSqlCompiler;
 import org.mockito.Mockito;
 import org.testng.Assert;
@@ -76,8 +74,6 @@ import org.testng.annotations.Test;
 import static org.apache.pinot.segment.local.segment.index.creator.RawIndexCreatorTest.getRandomValue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertTrue;
 
 
 /**
@@ -108,12 +104,11 @@ public class SegmentWithNullValueVectorTest {
   private InstanceDataManager _instanceDataManager;
   private ServerMetrics _serverMetrics;
   private QueryExecutor _queryExecutor;
-  private static final String RAW_TABLE_NAME = "testTable";
-  private static final String OFFLINE_TABLE_NAME = TableNameBuilder.OFFLINE.tableNameWithType(RAW_TABLE_NAME);
+  private static final String TABLE_NAME = "testTable";
   private static final String QUERY_EXECUTOR_CONFIG_PATH = "conf/query-executor.properties";
   private static final ExecutorService QUERY_RUNNERS = Executors.newFixedThreadPool(20);
-  private long _nullIntKeyCount = 0;
-  private long _longKeyCount = 0;
+  private int _nullIntKeyCount = 0;
+  private int _longKeyCount = 0;
 
   /**
    * Setup to build a segment with raw indexes (no-dictionary) of various data types.
@@ -131,8 +126,7 @@ public class SegmentWithNullValueVectorTest {
     _schema.addField(new DimensionFieldSpec(DOUBLE_COLUMN, FieldSpec.DataType.DOUBLE, true));
     _schema.addField(new DimensionFieldSpec(STRING_COLUMN, FieldSpec.DataType.STRING, true));
 
-    TableConfig tableConfig =
-        new TableConfigBuilder(TableType.OFFLINE).setTableName(RAW_TABLE_NAME).setNullHandlingEnabled(true).build();
+    TableConfig tableConfig = new TableConfigBuilder(TableType.OFFLINE).setTableName(TABLE_NAME).build();
     _random = new Random(System.nanoTime());
     buildIndex(tableConfig, _schema);
     _segment = ImmutableSegmentLoader.load(new File(SEGMENT_DIR_NAME, SEGMENT_NAME), ReadMode.heap);
@@ -147,8 +141,8 @@ public class SegmentWithNullValueVectorTest {
     // Mock the instance data manager
     _serverMetrics = new ServerMetrics(PinotMetricUtils.getPinotMetricsRegistry());
     TableDataManagerConfig tableDataManagerConfig = Mockito.mock(TableDataManagerConfig.class);
-    Mockito.when(tableDataManagerConfig.getTableName()).thenReturn(OFFLINE_TABLE_NAME);
-    Mockito.when(tableDataManagerConfig.getTableType()).thenReturn(TableType.OFFLINE);
+    Mockito.when(tableDataManagerConfig.getTableDataManagerType()).thenReturn("OFFLINE");
+    Mockito.when(tableDataManagerConfig.getTableName()).thenReturn(TABLE_NAME);
     Mockito.when(tableDataManagerConfig.getDataDir()).thenReturn(FileUtils.getTempDirectoryPath());
     InstanceDataManagerConfig instanceDataManagerConfig = mock(InstanceDataManagerConfig.class);
     when(instanceDataManagerConfig.getMaxParallelSegmentBuilds()).thenReturn(4);
@@ -164,7 +158,7 @@ public class SegmentWithNullValueVectorTest {
     tableDataManager.start();
     tableDataManager.addSegment(_segment);
     _instanceDataManager = Mockito.mock(InstanceDataManager.class);
-    Mockito.when(_instanceDataManager.getTableDataManager(OFFLINE_TABLE_NAME)).thenReturn(tableDataManager);
+    Mockito.when(_instanceDataManager.getTableDataManager(TABLE_NAME)).thenReturn(tableDataManager);
 
     // Set up the query executor
     URL resourceUrl = getClass().getClassLoader().getResource(QUERY_EXECUTOR_CONFIG_PATH);
@@ -189,6 +183,7 @@ public class SegmentWithNullValueVectorTest {
 
     config.setOutDir(SEGMENT_DIR_NAME);
     config.setSegmentName(SEGMENT_NAME);
+    config.setNullHandlingEnabled(true);
 
     List<GenericRow> rows = new ArrayList<>(NUM_ROWS);
     for (FieldSpec fieldSpec : schema.getAllFieldSpecs()) {
@@ -256,42 +251,38 @@ public class SegmentWithNullValueVectorTest {
     for (int i = 0; i < NUM_ROWS; i++) {
       for (FieldSpec fieldSpec : _schema.getAllFieldSpecs()) {
         String colName = fieldSpec.getName();
-        assertEquals(_actualNullVectorMap.get(colName)[i], nullValueVectorReaderMap.get(colName).isNull(i));
+        Assert.assertEquals(_actualNullVectorMap.get(colName)[i], nullValueVectorReaderMap.get(colName).isNull(i));
       }
     }
   }
 
   @Test
   public void testNotNullPredicate() {
-    String query = "SELECT COUNT(*) FROM " + OFFLINE_TABLE_NAME + " where " + INT_COLUMN + " IS NOT NULL";
+    String query = "SELECT COUNT(*) FROM " + TABLE_NAME + " where " + INT_COLUMN + " IS NOT NULL";
     InstanceRequest instanceRequest = new InstanceRequest(0L, CalciteSqlCompiler.compileToBrokerRequest(query));
     instanceRequest.setSearchSegments(_segmentNames);
-    InstanceResponseBlock instanceResponse = _queryExecutor.execute(getQueryRequest(instanceRequest), QUERY_RUNNERS);
-    assertTrue(instanceResponse.getResultsBlock() instanceof AggregationResultsBlock);
-    assertEquals(((AggregationResultsBlock) instanceResponse.getResultsBlock()).getResults().get(0),
-        NUM_ROWS - _nullIntKeyCount);
+    DataTable instanceResponse = _queryExecutor.processQuery(getQueryRequest(instanceRequest), QUERY_RUNNERS);
+    Assert.assertEquals(instanceResponse.getLong(0, 0), NUM_ROWS - _nullIntKeyCount);
   }
 
   @Test
   public void testNullPredicate() {
-    String query = "SELECT COUNT(*) FROM " + OFFLINE_TABLE_NAME + " where " + INT_COLUMN + " IS NULL";
+    String query = "SELECT COUNT(*) FROM " + TABLE_NAME + " where " + INT_COLUMN + " IS NULL";
     InstanceRequest instanceRequest = new InstanceRequest(0L, CalciteSqlCompiler.compileToBrokerRequest(query));
     instanceRequest.setSearchSegments(_segmentNames);
-    InstanceResponseBlock instanceResponse = _queryExecutor.execute(getQueryRequest(instanceRequest), QUERY_RUNNERS);
-    assertTrue(instanceResponse.getResultsBlock() instanceof AggregationResultsBlock);
-    assertEquals(((AggregationResultsBlock) instanceResponse.getResultsBlock()).getResults().get(0), _nullIntKeyCount);
+    DataTable instanceResponse = _queryExecutor.processQuery(getQueryRequest(instanceRequest), QUERY_RUNNERS);
+    Assert.assertEquals(instanceResponse.getLong(0, 0), _nullIntKeyCount);
   }
 
   @Test
   public void testNullWithAndPredicate() {
     String query =
-        "SELECT COUNT(*) FROM " + OFFLINE_TABLE_NAME + " where " + INT_COLUMN + " IS NOT NULL and " + LONG_COLUMN
-            + " > " + LONG_VALUE_THRESHOLD;
+        "SELECT COUNT(*) FROM " + TABLE_NAME + " where " + INT_COLUMN + " IS NOT NULL and " + LONG_COLUMN + " > "
+            + LONG_VALUE_THRESHOLD;
     InstanceRequest instanceRequest = new InstanceRequest(0L, CalciteSqlCompiler.compileToBrokerRequest(query));
     instanceRequest.setSearchSegments(_segmentNames);
-    InstanceResponseBlock instanceResponse = _queryExecutor.execute(getQueryRequest(instanceRequest), QUERY_RUNNERS);
-    assertTrue(instanceResponse.getResultsBlock() instanceof AggregationResultsBlock);
-    assertEquals(((AggregationResultsBlock) instanceResponse.getResultsBlock()).getResults().get(0), _longKeyCount);
+    DataTable instanceResponse = _queryExecutor.processQuery(getQueryRequest(instanceRequest), QUERY_RUNNERS);
+    Assert.assertEquals(instanceResponse.getLong(0, 0), _longKeyCount);
   }
 
   private ServerQueryRequest getQueryRequest(InstanceRequest instanceRequest) {

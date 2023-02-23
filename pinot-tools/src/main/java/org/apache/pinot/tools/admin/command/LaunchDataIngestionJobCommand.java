@@ -160,9 +160,6 @@ public class LaunchDataIngestionJobCommand extends AbstractBaseAdminCommand impl
   public static void main(String[] args) {
     PluginManager.get().init();
     int exitCode = new CommandLine(new LaunchDataIngestionJobCommand()).execute(args);
-    if ((exitCode != 0)
-        || Boolean.parseBoolean(System.getProperties().getProperty("pinot.admin.system.exit"))) {
-      System.exit(exitCode);
-    }
+    System.exit(exitCode);
   }
 }

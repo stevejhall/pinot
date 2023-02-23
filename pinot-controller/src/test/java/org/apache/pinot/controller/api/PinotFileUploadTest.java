@@ -27,11 +27,10 @@ import org.apache.pinot.controller.helix.ControllerTest;
 import org.apache.pinot.spi.config.table.TableConfig;
 import org.apache.pinot.spi.config.table.TableType;
 import org.apache.pinot.spi.utils.builder.TableConfigBuilder;
+import org.testng.Assert;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
-
-import static org.testng.Assert.assertTrue;
 
 
 /**
@@ -48,7 +47,9 @@ public class PinotFileUploadTest {
 
     // Adding table
     TableConfig tableConfig = new TableConfigBuilder(TableType.OFFLINE).setTableName(TABLE_NAME)
-        .setSegmentAssignmentStrategy("RandomAssignmentStrategy").setNumReplicas(2).build();
+        .setSegmentAssignmentStrategy("RandomAssignmentStrategy")
+        .setNumReplicas(2)
+        .build();
     TEST_INSTANCE.getHelixResourceManager().addTable(tableConfig);
   }
 
@@ -62,7 +63,7 @@ public class PinotFileUploadTest {
     HttpResponse response = httpClient.execute(httpPost);
     int statusCode = response.getStatusLine().getStatusCode();
 
-    assertTrue(statusCode >= 400 && statusCode < 500, "Status code = " + statusCode);
+    Assert.assertTrue(statusCode >= 400 && statusCode < 500, "Status code = " + statusCode);
   }
 
   @AfterClass

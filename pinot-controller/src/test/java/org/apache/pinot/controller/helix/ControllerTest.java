@@ -29,7 +29,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import javax.annotation.Nullable;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -78,37 +77,36 @@ import org.apache.pinot.spi.utils.builder.ControllerRequestURLBuilder;
 import org.apache.pinot.spi.utils.builder.TableNameBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testng.Assert;
 
 import static org.apache.pinot.spi.utils.CommonConstants.Helix.UNTAGGED_BROKER_INSTANCE;
 import static org.apache.pinot.spi.utils.CommonConstants.Helix.UNTAGGED_SERVER_INSTANCE;
 import static org.apache.pinot.spi.utils.CommonConstants.Server.DEFAULT_ADMIN_API_PORT;
-import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 
 
 public class ControllerTest {
+  public static final String DEFAULT_TENANT = "DefaultTenant";
   public static final String LOCAL_HOST = "localhost";
   public static final int DEFAULT_CONTROLLER_PORT = 18998;
-  public static final String DEFAULT_DATA_DIR = new File(FileUtils.getTempDirectoryPath(),
-      "test-controller-data-dir" + System.currentTimeMillis()).getAbsolutePath();
-  public static final String DEFAULT_LOCAL_TEMP_DIR = new File(FileUtils.getTempDirectoryPath(),
-      "test-controller-local-temp-dir" + System.currentTimeMillis()).getAbsolutePath();
+  public static final String DEFAULT_DATA_DIR =
+      new File(FileUtils.getTempDirectoryPath(), "test-controller-" + System.currentTimeMillis()).getAbsolutePath();
   public static final String BROKER_INSTANCE_ID_PREFIX = "Broker_localhost_";
   public static final String SERVER_INSTANCE_ID_PREFIX = "Server_localhost_";
   public static final String MINION_INSTANCE_ID_PREFIX = "Minion_localhost_";
 
-  // Default ControllerTest instance settings
-  public static final int DEFAULT_MIN_NUM_REPLICAS = 2;
-  public static final int DEFAULT_NUM_BROKER_INSTANCES = 3;
-  // NOTE: To add HLC realtime table, number of Server instances must be multiple of replicas
-  public static final int DEFAULT_NUM_SERVER_INSTANCES = 4;
+  // Default static ControllerTest instance settings.
+  // NUM_BROKER_INSTANCES and NUM_SERVER_INSTANCES must be a multiple of MIN_NUM_REPLICAS.
+  public static final int MIN_NUM_REPLICAS = 2;
+  public static final int NUM_BROKER_INSTANCES = 4;
+  public static final int NUM_SERVER_INSTANCES = 4;
+  public static final int TOTAL_NUM_SERVER_INSTANCES = 2 * NUM_SERVER_INSTANCES;
+  public static final int TOTAL_NUM_BROKER_INSTANCES = 2 * NUM_BROKER_INSTANCES;
 
   /**
    * default static instance used to access all wrapped static instances.
    */
-  public static final ControllerTest DEFAULT_INSTANCE = new ControllerTest();
-
-  protected final String _clusterName = getClass().getSimpleName();
+  private static final ControllerTest DEFAULT_INSTANCE = new ControllerTest();
 
   protected static HttpClient _httpClient = null;
 
@@ -141,7 +139,7 @@ public class ControllerTest {
   }
 
   public String getHelixClusterName() {
-    return _clusterName;
+    return getClass().getSimpleName();
   }
 
   /**
@@ -205,7 +203,6 @@ public class ControllerTest {
     properties.put(ControllerConf.CONTROLLER_HOST, LOCAL_HOST);
     properties.put(ControllerConf.CONTROLLER_PORT, NetUtils.findOpenPort(DEFAULT_CONTROLLER_PORT));
     properties.put(ControllerConf.DATA_DIR, DEFAULT_DATA_DIR);
-    properties.put(ControllerConf.LOCAL_TEMP_DIR, DEFAULT_LOCAL_TEMP_DIR);
     properties.put(ControllerConf.ZK_STR, getZkUrl());
     properties.put(ControllerConf.HELIX_CLUSTER_NAME, getHelixClusterName());
     // Enable groovy on the controller
@@ -254,9 +251,9 @@ public class ControllerTest {
       case PINOT_ONLY:
         _helixAdmin = _helixResourceManager.getHelixAdmin();
         _propertyStore = _helixResourceManager.getPropertyStore();
+
         // TODO: Enable periodic rebalance per 10 seconds as a temporary work-around for the Helix issue:
-        //       https://github.com/apache/helix/issues/331 and https://github.com/apache/helix/issues/2309.
-        //       Remove this after Helix fixing the issue.
+        //       https://github.com/apache/helix/issues/331. Remove this after Helix fixing the issue.
         configAccessor.set(scope, ClusterConfig.ClusterConfigProperty.REBALANCE_TIMER_PERIOD.name(), "10000");
         break;
       case HELIX_ONLY:
@@ -585,7 +582,7 @@ public class ControllerTest {
     }
   }
 
-  public static Schema createDummySchema(String tableName) {
+  public Schema createDummySchema(String tableName) {
     Schema schema = new Schema();
     schema.setSchemaName(tableName);
     schema.addField(new DimensionFieldSpec("dimA", FieldSpec.DataType.STRING, true, ""));
@@ -596,7 +593,7 @@ public class ControllerTest {
     return schema;
   }
 
-  public static Schema createDummySchemaWithPrimaryKey(String tableName) {
+  public Schema createDummySchemaForUpsertTable(String tableName) {
     Schema schema = createDummySchema(tableName);
     schema.setPrimaryKeyColumns(Collections.singletonList("dimA"));
     return schema;
@@ -638,13 +635,13 @@ public class ControllerTest {
 
   public TableConfig getOfflineTableConfig(String tableName) {
     TableConfig offlineTableConfig = _helixResourceManager.getOfflineTableConfig(tableName);
-    assertNotNull(offlineTableConfig);
+    Assert.assertNotNull(offlineTableConfig);
     return offlineTableConfig;
   }
 
   public TableConfig getRealtimeTableConfig(String tableName) {
     TableConfig realtimeTableConfig = _helixResourceManager.getRealtimeTableConfig(tableName);
-    assertNotNull(realtimeTableConfig);
+    Assert.assertNotNull(realtimeTableConfig);
     return realtimeTableConfig;
   }
 
@@ -656,21 +653,6 @@ public class ControllerTest {
   public void dropRealtimeTable(String tableName)
       throws IOException {
     getControllerRequestClient().deleteTable(TableNameBuilder.REALTIME.tableNameWithType(tableName));
-  }
-
-  public List<String> listSegments(String tableName)
-      throws IOException {
-    return listSegments(tableName, null, false);
-  }
-
-  public List<String> listSegments(String tableName, @Nullable String tableType, boolean excludeReplacedSegments)
-      throws IOException {
-    return getControllerRequestClient().listSegments(tableName, tableType, excludeReplacedSegments);
-  }
-
-  public void dropSegment(String tableName, String segmentName)
-      throws IOException {
-    getControllerRequestClient().deleteSegment(tableName, segmentName);
   }
 
   public void dropAllSegments(String tableName, TableType tableType)
@@ -916,7 +898,7 @@ public class ControllerTest {
     properties.put(ControllerConf.ACCESS_CONTROL_FACTORY_CLASS, AllowAllAccessFactory.class.getName());
 
     // Used in PinotTableRestletResourceTest
-    properties.put(ControllerConf.TABLE_MIN_REPLICAS, DEFAULT_MIN_NUM_REPLICAS);
+    properties.put(ControllerConf.TABLE_MIN_REPLICAS, MIN_NUM_REPLICAS);
 
     // Used in PinotControllerAppConfigsTest to test obfuscation
     properties.put("controller.segment.fetcher.auth.token", "*personal*");
@@ -925,16 +907,27 @@ public class ControllerTest {
     return properties;
   }
 
+  public void startSharedTestSetup()
+      throws Exception {
+    startSharedTestSetup(Collections.emptyMap());
+  }
+
   /**
    * Initialize shared state for the TestNG default test group.
    */
-  public void startSharedTestSetup()
+  public void startSharedTestSetup(Map<String, Object> extraProperties)
       throws Exception {
     startZk();
-    startController(getSharedControllerConfiguration());
 
-    addMoreFakeBrokerInstancesToAutoJoinHelixCluster(DEFAULT_NUM_BROKER_INSTANCES, true);
-    addMoreFakeServerInstancesToAutoJoinHelixCluster(DEFAULT_NUM_SERVER_INSTANCES, true);
+    Map<String, Object> sharedControllerConfiguration = getSharedControllerConfiguration();
+    sharedControllerConfiguration.putAll(extraProperties);
+    startController(sharedControllerConfiguration);
+
+    addMoreFakeBrokerInstancesToAutoJoinHelixCluster(NUM_BROKER_INSTANCES, true);
+    addMoreFakeServerInstancesToAutoJoinHelixCluster(NUM_SERVER_INSTANCES, true);
+
+    addMoreFakeBrokerInstancesToAutoJoinHelixCluster(TOTAL_NUM_BROKER_INSTANCES, false);
+    addMoreFakeServerInstancesToAutoJoinHelixCluster(TOTAL_NUM_SERVER_INSTANCES, false);
   }
 
   /**
@@ -953,25 +946,36 @@ public class ControllerTest {
    */
   public void setupSharedStateAndValidate()
       throws Exception {
+    setupSharedStateAndValidate(Collections.emptyMap());
+  }
+
+  public void setupSharedStateAndValidate(Map<String, Object> extraProperties)
+      throws Exception {
     if (_zookeeperInstance == null || _helixResourceManager == null) {
       // this is expected to happen only when running a single test case outside of testNG group, i.e when test
       // cases are run one at a time within IntelliJ or through maven command line. When running under a testNG
       // group, state will have already been setup by @BeforeGroups method in ControllerTestSetup.
-      startSharedTestSetup();
+      startSharedTestSetup(extraProperties);
     }
 
-    // In a single tenant cluster, only the default tenant should exist
-    assertEquals(_helixResourceManager.getAllBrokerTenantNames(),
-        Collections.singleton(TagNameUtils.DEFAULT_TENANT_NAME));
-    assertEquals(_helixResourceManager.getAllInstancesForBrokerTenant(TagNameUtils.DEFAULT_TENANT_NAME).size(),
-        DEFAULT_NUM_BROKER_INSTANCES);
-    assertEquals(_helixResourceManager.getAllServerTenantNames(),
-        Collections.singleton(TagNameUtils.DEFAULT_TENANT_NAME));
-    assertEquals(_helixResourceManager.getAllInstancesForServerTenant(TagNameUtils.DEFAULT_TENANT_NAME).size(),
-        DEFAULT_NUM_SERVER_INSTANCES);
+    // Check number of tenants
+    Assert.assertEquals(getHelixResourceManager().getAllBrokerTenantNames().size(), 1);
+    Assert.assertEquals(getHelixResourceManager().getAllServerTenantNames().size(), 1);
+
+    // Check number of tagged broker and server instances
+    Assert.assertEquals(getTaggedBrokerCount(), NUM_BROKER_INSTANCES);
+    Assert.assertEquals(getTaggedServerCount(), NUM_SERVER_INSTANCES);
 
     // No pre-existing tables
-    assertEquals(getHelixResourceManager().getAllTables().size(), 0);
+    Assert.assertEquals(getHelixResourceManager().getAllTables().size(), 0);
+
+    // Check if tenants have right number of instances.
+    Assert.assertEquals(getHelixResourceManager().getAllInstancesForBrokerTenant("DefaultBroker").size(), 0);
+    Assert.assertEquals(getHelixResourceManager().getAllInstancesForServerTenant("DefaultServer").size(), 0);
+
+    // Check number of untagged instances.
+    Assert.assertEquals(getHelixResourceManager().getOnlineUnTaggedBrokerInstanceList().size(), NUM_BROKER_INSTANCES);
+    Assert.assertEquals(getHelixResourceManager().getOnlineUnTaggedServerInstanceList().size(), NUM_SERVER_INSTANCES);
   }
 
   /**
@@ -992,6 +996,23 @@ public class ControllerTest {
     if (CollectionUtils.isNotEmpty(schemaNames)) {
       for (String schemaName : schemaNames) {
         getHelixResourceManager().deleteSchema(getHelixResourceManager().getSchema(schemaName));
+      }
+    }
+
+    // Delete broker tenants except default tenant
+    Set<String> brokerTenants = getHelixResourceManager().getAllBrokerTenantNames();
+    for (String tenant : brokerTenants) {
+      if (!tenant.startsWith(DEFAULT_TENANT)) {
+        getHelixResourceManager().deleteBrokerTenantFor(tenant);
+      }
+    }
+
+    // Delete server tenants except default tenant
+    Set<String> serverTenants = getHelixResourceManager().getAllServerTenantNames();
+    for (String tenant : serverTenants) {
+      if (!tenant.startsWith(DEFAULT_TENANT)) {
+        getHelixResourceManager().deleteOfflineServerTenantFor(tenant);
+        getHelixResourceManager().deleteRealtimeServerTenantFor(tenant);
       }
     }
   }

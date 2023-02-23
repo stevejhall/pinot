@@ -68,7 +68,7 @@ import static org.testng.Assert.assertTrue;
  * TODO: Add separate module-level tests and remove the randomness of this test
  */
 public class KafkaConfluentSchemaRegistryAvroMessageDecoderRealtimeClusterIntegrationTest
-    extends BaseRealtimeClusterIntegrationTest {
+    extends RealtimeClusterIntegrationTest {
   private static final String CONSUMER_DIRECTORY = "/tmp/consumer-test";
   private static final String TEST_UPDATED_INVERTED_INDEX_QUERY =
       "SELECT COUNT(*) FROM mytable WHERE DivActualElapsedTime = 305";
@@ -182,6 +182,11 @@ public class KafkaConfluentSchemaRegistryAvroMessageDecoderRealtimeClusterIntegr
 
   @Override
   protected boolean injectTombstones() {
+    return true;
+  }
+
+  @Override
+  protected boolean useLlc() {
     return true;
   }
 

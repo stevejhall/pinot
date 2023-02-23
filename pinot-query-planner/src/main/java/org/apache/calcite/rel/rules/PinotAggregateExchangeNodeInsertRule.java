@@ -46,7 +46,7 @@ import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
-import org.apache.pinot.query.planner.stage.AggregateNode;
+import org.apache.pinot.query.planner.hints.PinotRelationalHints;
 
 
 /**
@@ -70,7 +70,7 @@ public class PinotAggregateExchangeNodeInsertRule extends RelOptRule {
   public static final PinotAggregateExchangeNodeInsertRule INSTANCE =
       new PinotAggregateExchangeNodeInsertRule(PinotRuleUtils.PINOT_REL_FACTORY);
   private static final Set<SqlKind> SUPPORTED_AGG_KIND = ImmutableSet.of(
-      SqlKind.SUM, SqlKind.SUM0, SqlKind.MIN, SqlKind.MAX, SqlKind.COUNT, SqlKind.OTHER_FUNCTION);
+      SqlKind.SUM, SqlKind.SUM0, SqlKind.MIN, SqlKind.MAX, SqlKind.COUNT);
 
   public PinotAggregateExchangeNodeInsertRule(RelBuilderFactory factory) {
     super(operand(LogicalAggregate.class, any()), factory, null);
@@ -83,8 +83,8 @@ public class PinotAggregateExchangeNodeInsertRule extends RelOptRule {
     }
     if (call.rel(0) instanceof Aggregate) {
       Aggregate agg = call.rel(0);
-      return !agg.getHints().contains(AggregateNode.INTERMEDIATE_STAGE_HINT)
-          && !agg.getHints().contains(AggregateNode.FINAL_STAGE_HINT);
+      return !agg.getHints().contains(PinotRelationalHints.AGG_LEAF_STAGE)
+          && !agg.getHints().contains(PinotRelationalHints.AGG_INTERMEDIATE_STAGE);
     }
     return false;
   }
@@ -104,7 +104,7 @@ public class PinotAggregateExchangeNodeInsertRule extends RelOptRule {
 
     // 1. attach leaf agg RelHint to original agg.
     ImmutableList<RelHint> newLeafAggHints =
-        new ImmutableList.Builder<RelHint>().addAll(orgHints).add(AggregateNode.INTERMEDIATE_STAGE_HINT).build();
+        new ImmutableList.Builder<RelHint>().addAll(orgHints).add(PinotRelationalHints.AGG_LEAF_STAGE).build();
     Aggregate newLeafAgg =
         new LogicalAggregate(oldAggRel.getCluster(), oldAggRel.getTraitSet(), newLeafAggHints, oldAggRel.getInput(),
             oldAggRel.getGroupSet(), oldAggRel.getGroupSets(), oldAggRel.getAggCallList());
@@ -150,7 +150,7 @@ public class PinotAggregateExchangeNodeInsertRule extends RelOptRule {
     // create new aggregate relation.
     ImmutableList<RelHint> orgHints = oldAggRel.getHints();
     ImmutableList<RelHint> newIntermediateAggHints =
-        new ImmutableList.Builder<RelHint>().addAll(orgHints).add(AggregateNode.FINAL_STAGE_HINT).build();
+        new ImmutableList.Builder<RelHint>().addAll(orgHints).add(PinotRelationalHints.AGG_INTERMEDIATE_STAGE).build();
     ImmutableBitSet groupSet = ImmutableBitSet.range(nGroups);
     relBuilder.aggregate(
         relBuilder.groupKey(groupSet, ImmutableList.of(groupSet)),

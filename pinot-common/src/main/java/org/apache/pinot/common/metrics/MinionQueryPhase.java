@@ -22,10 +22,7 @@ import org.apache.pinot.common.Utils;
 
 
 public enum MinionQueryPhase implements AbstractMetrics.QueryPhase {
-  // Remove below checkstyle comment filter when first enum is created.
-  // CHECKSTYLE:OFF: checkstyle:coding
-  ;
-  // CHECKSTYLE:OFF: checkstyle:coding
+  TASK_EXECUTION, TASK_QUEUEING;
 
   private final String _queryPhaseName;
 

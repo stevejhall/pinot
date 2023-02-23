@@ -26,7 +26,7 @@
   <parent>
     <artifactId>pinot-stream-ingestion</artifactId>
     <groupId>org.apache.pinot</groupId>
-    <version>0.13.0-SNAPSHOT</version>
+    <version>0.12.0-SNAPSHOT</version>
     <relativePath>..</relativePath>
   </parent>
 
@@ -36,6 +36,7 @@
   <properties>
     <pinot.root>${basedir}/../../..</pinot.root>
     <kafka.lib.version>2.8.1</kafka.lib.version>
+    <kafka.clients.version>2.8.1</kafka.clients.version>
     <phase.prop>package</phase.prop>
   </properties>
 
@@ -44,12 +45,18 @@
       <groupId>org.apache.pinot</groupId>
       <artifactId>pinot-kafka-base</artifactId>
       <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.kafka</groupId>
+          <artifactId>kafka-metadata:jar</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <!-- Kafka  -->
     <dependency>
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
-      <version>${kafka.lib.version}</version>
+      <version>${kafka.clients.version}</version>
       <exclusions>
         <exclusion>
           <groupId>org.slf4j</groupId>
@@ -91,6 +98,10 @@
           <groupId>org.scala-lang</groupId>
           <artifactId>scala-reflect</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>org.apache.kafka</groupId>
+          <artifactId>kafka-clients</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
@@ -107,10 +118,22 @@
       <groupId>net.sf.jopt-simple</groupId>
       <artifactId>jopt-simple</artifactId>
     </dependency>
+    <!-- Added by Nike -->
+     <dependency>
+      <groupId>io.strimzi</groupId>
+      <artifactId>kafka-oauth-client</artifactId>
+      <version>0.11.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.nimbusds</groupId>
+          <artifactId>nimbus-jose-jwt</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
     <dependency>
-      <groupId>io.dropwizard.metrics</groupId>
-      <artifactId>metrics-core</artifactId>
-      <scope>test</scope>
+      <groupId>com.nimbusds</groupId>
+      <artifactId>nimbus-jose-jwt</artifactId>
+      <version>9.25.6</version>
     </dependency>
   </dependencies>
 

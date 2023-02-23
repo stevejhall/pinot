@@ -20,7 +20,6 @@ package org.apache.pinot.tools.admin.command;
 
 import org.apache.pinot.controller.helix.core.rebalance.RebalanceResult;
 import org.apache.pinot.spi.utils.JsonUtils;
-import org.apache.pinot.spi.utils.RebalanceConfigConstants;
 import org.apache.pinot.tools.Command;
 import org.apache.pinot.tools.PinotTableRebalancer;
 import org.slf4j.Logger;
@@ -78,15 +77,6 @@ public class RebalanceTableCommand extends AbstractBaseAdminCommand implements C
           + " cannot be achieved, false by default)")
   private boolean _bestEfforts = false;
 
-  @CommandLine.Option(names = {"-externalViewCheckIntervalInMs"},
-      description = "How often to check if external view converges with ideal view")
-  private long _externalViewCheckIntervalInMs = RebalanceConfigConstants.DEFAULT_EXTERNAL_VIEW_CHECK_INTERVAL_IN_MS;
-
-  @CommandLine.Option(names = {"-externalViewStabilizationTimeoutInMs"},
-      description = "How long to wait till external view converges with ideal view")
-  private long _externalViewStabilizationTimeoutInMs =
-      RebalanceConfigConstants.DEFAULT_EXTERNAL_VIEW_STABILIZATION_TIMEOUT_IN_MS;
-
   @CommandLine.Option(names = {"-help", "-h", "--h", "--help"}, help = true, description = "Print this message")
   private boolean _help = false;
 
@@ -104,8 +94,7 @@ public class RebalanceTableCommand extends AbstractBaseAdminCommand implements C
       throws Exception {
     PinotTableRebalancer tableRebalancer =
         new PinotTableRebalancer(_zkAddress, _clusterName, _dryRun, _reassignInstances, _includeConsuming, _bootstrap,
-            _downtime, _minAvailableReplicas, _bestEfforts, _externalViewCheckIntervalInMs,
-            _externalViewStabilizationTimeoutInMs);
+            _downtime, _minAvailableReplicas, _bestEfforts);
     RebalanceResult rebalanceResult = tableRebalancer.rebalance(_tableNameWithType);
     LOGGER
         .info("Got rebalance result: {} for table: {}", JsonUtils.objectToString(rebalanceResult), _tableNameWithType);

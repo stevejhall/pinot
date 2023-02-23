@@ -85,9 +85,11 @@ public class RoundDecimalTransformFunction extends BaseTransformFunction {
   @Override
   public double[] transformToDoubleValuesSV(ProjectionBlock projectionBlock) {
     int length = projectionBlock.getNumDocs();
-    if (_doubleValuesSV == null) {
+
+    if (_doubleValuesSV == null || _doubleValuesSV.length < length) {
       _doubleValuesSV = new double[length];
     }
+
     double[] leftValues = _leftTransformFunction.transformToDoubleValuesSV(projectionBlock);
     if (_fixedScale) {
       for (int i = 0; i < length; i++) {
@@ -105,6 +107,7 @@ public class RoundDecimalTransformFunction extends BaseTransformFunction {
         _doubleValuesSV[i] = (double) Math.round(leftValues[i]);
       }
     }
+
     return _doubleValuesSV;
   }
 }

@@ -59,10 +59,10 @@ public class GrpcBrokerRequestHandler extends BaseBrokerRequestHandler {
   private final PinotStreamingQueryClient _streamingQueryClient;
 
   // TODO: Support TLS
-  public GrpcBrokerRequestHandler(PinotConfiguration config, String brokerId, BrokerRoutingManager routingManager,
+  public GrpcBrokerRequestHandler(PinotConfiguration config, BrokerRoutingManager routingManager,
       AccessControlFactory accessControlFactory, QueryQuotaManager queryQuotaManager, TableCache tableCache,
       BrokerMetrics brokerMetrics, TlsConfig tlsConfig) {
-    super(config, brokerId, routingManager, accessControlFactory, queryQuotaManager, tableCache, brokerMetrics);
+    super(config, routingManager, accessControlFactory, queryQuotaManager, tableCache, brokerMetrics);
     LOGGER.info("Using Grpc BrokerRequestHandler.");
     _grpcConfig = GrpcConfig.buildGrpcQueryConfig(config);
 
@@ -100,7 +100,10 @@ public class GrpcBrokerRequestHandler extends BaseBrokerRequestHandler {
     }
     if (realtimeBrokerRequest != null) {
       assert realtimeRoutingTable != null;
-      sendRequest(requestId, TableType.REALTIME, realtimeBrokerRequest, realtimeRoutingTable, responseMap,
+      // NOTE: When both OFFLINE and REALTIME request exist, use negative request id for REALTIME to differentiate
+      //       from the OFFLINE one
+      long realtimeRequestId = offlineBrokerRequest == null ? requestId : -requestId;
+      sendRequest(realtimeRequestId, TableType.REALTIME, realtimeBrokerRequest, realtimeRoutingTable, responseMap,
           requestContext.isSampledRequest());
     }
     return _streamingReduceService.reduceOnStreamResponse(originalBrokerRequest, responseMap, timeoutMs,

@@ -65,7 +65,7 @@ public class ConcurrentMapPartitionUpsertMetadataManager extends BasePartitionUp
 
   @Override
   protected long getNumPrimaryKeys() {
-    return _primaryKeyToRecordLocationMap.size();
+    return _primaryKeyColumns.size();
   }
 
   @Override
@@ -162,27 +162,21 @@ public class ConcurrentMapPartitionUpsertMetadataManager extends BasePartitionUp
     assert !validDocIds.isEmpty();
     PrimaryKey primaryKey = new PrimaryKey(new Object[_primaryKeyColumns.size()]);
     PeekableIntIterator iterator = validDocIds.getIntIterator();
-    try (
-        UpsertUtils.PrimaryKeyReader primaryKeyReader = new UpsertUtils.PrimaryKeyReader(segment, _primaryKeyColumns)) {
-      while (iterator.hasNext()) {
-        primaryKeyReader.getPrimaryKey(iterator.next(), primaryKey);
-        _primaryKeyToRecordLocationMap.computeIfPresent(HashUtils.hashPrimaryKey(primaryKey, _hashFunction),
-            (pk, recordLocation) -> {
-              if (recordLocation.getSegment() == segment) {
-                return null;
-              }
-              return recordLocation;
-            });
-      }
-    } catch (Exception e) {
-      throw new RuntimeException(
-          String.format("Caught exception while removing segment: %s, table: %s", segment.getSegmentName(),
-              _tableNameWithType), e);
+    while (iterator.hasNext()) {
+      int docId = iterator.next();
+      UpsertUtils.getPrimaryKey(segment, _primaryKeyColumns, docId, primaryKey);
+      _primaryKeyToRecordLocationMap.computeIfPresent(HashUtils.hashPrimaryKey(primaryKey, _hashFunction),
+          (pk, recordLocation) -> {
+            if (recordLocation.getSegment() == segment) {
+              return null;
+            }
+            return recordLocation;
+          });
     }
   }
 
   @Override
-  protected void doAddRecord(MutableSegment segment, RecordInfo recordInfo) {
+  public void addRecord(MutableSegment segment, RecordInfo recordInfo) {
     ThreadSafeMutableRoaringBitmap validDocIds = Objects.requireNonNull(segment.getValidDocIds());
     _primaryKeyToRecordLocationMap.compute(HashUtils.hashPrimaryKey(recordInfo.getPrimaryKey(), _hashFunction),
         (primaryKey, currentRecordLocation) -> {
@@ -217,8 +211,12 @@ public class ConcurrentMapPartitionUpsertMetadataManager extends BasePartitionUp
   }
 
   @Override
-  protected GenericRow doUpdateRecord(GenericRow record, RecordInfo recordInfo) {
-    assert _partialUpsertHandler != null;
+  public GenericRow updateRecord(GenericRow record, RecordInfo recordInfo) {
+    // Directly return the record when partial-upsert is not enabled
+    if (_partialUpsertHandler == null) {
+      return record;
+    }
+
     AtomicReference<GenericRow> previousRecordReference = new AtomicReference<>();
     RecordLocation currentRecordLocation = _primaryKeyToRecordLocationMap.computeIfPresent(
         HashUtils.hashPrimaryKey(recordInfo.getPrimaryKey(), _hashFunction), (pk, recordLocation) -> {

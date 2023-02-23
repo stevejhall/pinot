@@ -47,7 +47,7 @@ public class OnHeapDoubleDictionary extends BaseImmutableDictionary {
    * @param length Length of the dictionary
    */
   public OnHeapDoubleDictionary(PinotDataBuffer dataBuffer, int length) {
-    super(dataBuffer, length, Double.BYTES);
+    super(dataBuffer, length, Double.BYTES, (byte) 0);
 
     _valToDictId = new Double2IntOpenHashMap(length);
     _valToDictId.defaultReturnValue(Dictionary.NULL_VALUE_INDEX);

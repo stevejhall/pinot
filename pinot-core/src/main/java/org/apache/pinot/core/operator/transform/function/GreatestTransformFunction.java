@@ -32,7 +32,7 @@ public class GreatestTransformFunction extends SelectTupleElementTransformFuncti
   @Override
   public int[] transformToIntValuesSV(ProjectionBlock projectionBlock) {
     int numDocs = projectionBlock.getNumDocs();
-    if (_intValuesSV == null) {
+    if (_intValuesSV == null || _intValuesSV.length < numDocs) {
       _intValuesSV = new int[numDocs];
     }
     int[] values = _arguments.get(0).transformToIntValuesSV(projectionBlock);
@@ -49,7 +49,7 @@ public class GreatestTransformFunction extends SelectTupleElementTransformFuncti
   @Override
   public long[] transformToLongValuesSV(ProjectionBlock projectionBlock) {
     int numDocs = projectionBlock.getNumDocs();
-    if (_longValuesSV == null) {
+    if (_longValuesSV == null || _longValuesSV.length < numDocs) {
       _longValuesSV = new long[numDocs];
     }
     long[] values = _arguments.get(0).transformToLongValuesSV(projectionBlock);
@@ -66,7 +66,7 @@ public class GreatestTransformFunction extends SelectTupleElementTransformFuncti
   @Override
   public float[] transformToFloatValuesSV(ProjectionBlock projectionBlock) {
     int numDocs = projectionBlock.getNumDocs();
-    if (_floatValuesSV == null) {
+    if (_floatValuesSV == null || _floatValuesSV.length < numDocs) {
       _floatValuesSV = new float[numDocs];
     }
     float[] values = _arguments.get(0).transformToFloatValuesSV(projectionBlock);
@@ -83,7 +83,7 @@ public class GreatestTransformFunction extends SelectTupleElementTransformFuncti
   @Override
   public double[] transformToDoubleValuesSV(ProjectionBlock projectionBlock) {
     int numDocs = projectionBlock.getNumDocs();
-    if (_doubleValuesSV == null) {
+    if (_doubleValuesSV == null || _doubleValuesSV.length < numDocs) {
       _doubleValuesSV = new double[numDocs];
     }
     double[] values = _arguments.get(0).transformToDoubleValuesSV(projectionBlock);
@@ -100,7 +100,7 @@ public class GreatestTransformFunction extends SelectTupleElementTransformFuncti
   @Override
   public BigDecimal[] transformToBigDecimalValuesSV(ProjectionBlock projectionBlock) {
     int numDocs = projectionBlock.getNumDocs();
-    if (_bigDecimalValuesSV == null) {
+    if (_bigDecimalValuesSV == null || _bigDecimalValuesSV.length < numDocs) {
       _bigDecimalValuesSV = new BigDecimal[numDocs];
     }
     BigDecimal[] values = _arguments.get(0).transformToBigDecimalValuesSV(projectionBlock);
@@ -117,7 +117,7 @@ public class GreatestTransformFunction extends SelectTupleElementTransformFuncti
   @Override
   public String[] transformToStringValuesSV(ProjectionBlock projectionBlock) {
     int numDocs = projectionBlock.getNumDocs();
-    if (_stringValuesSV == null) {
+    if (_stringValuesSV == null || _stringValuesSV.length < numDocs) {
       _stringValuesSV = new String[numDocs];
     }
     String[] values = _arguments.get(0).transformToStringValuesSV(projectionBlock);

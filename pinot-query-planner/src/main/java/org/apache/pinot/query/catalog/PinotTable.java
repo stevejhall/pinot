@@ -18,7 +18,7 @@
  */
 package org.apache.pinot.query.catalog;
 
-import com.google.common.base.Preconditions;
+import com.clearspring.analytics.util.Preconditions;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataType;

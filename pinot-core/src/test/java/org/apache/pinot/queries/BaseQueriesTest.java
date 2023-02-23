@@ -18,7 +18,6 @@
  */
 package org.apache.pinot.queries;
 
-import java.io.File;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -33,7 +32,6 @@ import org.apache.pinot.common.request.BrokerRequest;
 import org.apache.pinot.common.request.PinotQuery;
 import org.apache.pinot.common.response.broker.BrokerResponseNative;
 import org.apache.pinot.core.common.Operator;
-import org.apache.pinot.core.operator.blocks.InstanceResponseBlock;
 import org.apache.pinot.core.plan.Plan;
 import org.apache.pinot.core.plan.maker.InstancePlanMakerImplV2;
 import org.apache.pinot.core.plan.maker.PlanMaker;
@@ -44,21 +42,13 @@ import org.apache.pinot.core.query.request.context.QueryContext;
 import org.apache.pinot.core.query.request.context.utils.QueryContextConverterUtils;
 import org.apache.pinot.core.transport.ServerRoutingInstance;
 import org.apache.pinot.core.util.GapfillUtils;
-import org.apache.pinot.segment.local.indexsegment.immutable.ImmutableSegmentLoader;
-import org.apache.pinot.segment.local.segment.index.loader.IndexLoadingConfig;
-import org.apache.pinot.segment.local.segment.index.loader.SegmentPreProcessor;
-import org.apache.pinot.segment.spi.ImmutableSegment;
 import org.apache.pinot.segment.spi.IndexSegment;
-import org.apache.pinot.segment.spi.loader.SegmentDirectoryLoaderContext;
-import org.apache.pinot.segment.spi.loader.SegmentDirectoryLoaderRegistry;
-import org.apache.pinot.segment.spi.store.SegmentDirectory;
 import org.apache.pinot.spi.config.table.TableConfig;
 import org.apache.pinot.spi.config.table.TableType;
 import org.apache.pinot.spi.data.Schema;
 import org.apache.pinot.spi.env.PinotConfiguration;
 import org.apache.pinot.spi.utils.CommonConstants;
 import org.apache.pinot.spi.utils.CommonConstants.Server;
-import org.apache.pinot.spi.utils.ReadMode;
 import org.apache.pinot.sql.parsers.CalciteSqlCompiler;
 import org.apache.pinot.sql.parsers.CalciteSqlParser;
 
@@ -111,7 +101,7 @@ public abstract class BaseQueriesTest {
    * In order to query 2 distinct instances, the caller of this function should handle initializing 2 instances with
    * different index segments in the test and overriding getDistinctInstances.
    * This can be particularly useful to test statistical aggregation functions.
-   * @see StatisticalQueriesTest for an example use case.
+   * @see CovarianceQueriesTest for an example use case.
    */
   protected BrokerResponseNative getBrokerResponse(String query) {
     return getBrokerResponse(query, PLAN_MAKER);
@@ -125,7 +115,7 @@ public abstract class BaseQueriesTest {
    * In order to query 2 distinct instances, the caller of this function should handle initializing 2 instances with
    * different index segments in the test and overriding getDistinctInstances.
    * This can be particularly useful to test statistical aggregation functions.
-   * @see StatisticalQueriesTest for an example use case.
+   * @see CovarianceQueriesTest for an example use case.
    */
   protected BrokerResponseNative getBrokerResponseWithFilter(String query) {
     return getBrokerResponse(query + getFilter());
@@ -139,7 +129,7 @@ public abstract class BaseQueriesTest {
    * In order to query 2 distinct instances, the caller of this function should handle initializing 2 instances with
    * different index segments in the test and overriding getDistinctInstances.
    * This can be particularly useful to test statistical aggregation functions.
-   * @see StatisticalQueriesTest for an example use case.
+   * @see CovarianceQueriesTest for an example use case.
    */
   protected BrokerResponseNative getBrokerResponse(String query, PlanMaker planMaker) {
     return getBrokerResponse(query, planMaker, null);
@@ -153,7 +143,7 @@ public abstract class BaseQueriesTest {
    * In order to query 2 distinct instances, the caller of this function should handle initializing 2 instances with
    * different index segments in the test and overriding getDistinctInstances.
    * This can be particularly useful to test statistical aggregation functions.
-   * @see StatisticalQueriesTest for an example use case.
+   * @see CovarianceQueriesTest for an example use case.
    */
   protected BrokerResponseNative getBrokerResponse(String query, @Nullable Map<String, String> extraQueryOptions) {
     return getBrokerResponse(query, PLAN_MAKER, extraQueryOptions);
@@ -167,7 +157,7 @@ public abstract class BaseQueriesTest {
    * In order to query 2 distinct instances, the caller of this function should handle initializing 2 instances with
    * different index segments in the test and overriding getDistinctInstances.
    * This can be particularly useful to test statistical aggregation functions.
-   * @see StatisticalQueriesTest for an example use case.
+   * @see CovarianceQueriesTest for an example use case.
    */
   private BrokerResponseNative getBrokerResponse(String query, PlanMaker planMaker,
       @Nullable Map<String, String> extraQueryOptions) {
@@ -191,7 +181,7 @@ public abstract class BaseQueriesTest {
    * In order to query 2 distinct instances, the caller of this function should handle initializing 2 instances with
    * different index segments in the test and overriding getDistinctInstances.
    * This can be particularly useful to test statistical aggregation functions.
-   * @see StatisticalQueriesTest for an example use case.
+   * @see CovarianceQueriesTest for an example use case.
    */
   private BrokerResponseNative getBrokerResponse(PinotQuery pinotQuery, PlanMaker planMaker) {
     PinotQuery serverPinotQuery = GapfillUtils.stripGapfill(pinotQuery);
@@ -207,10 +197,10 @@ public abstract class BaseQueriesTest {
     // Server side
     serverQueryContext.setEndTimeMs(System.currentTimeMillis() + Server.DEFAULT_QUERY_EXECUTOR_TIMEOUT_MS);
     Plan plan = planMaker.makeInstancePlan(getIndexSegments(), serverQueryContext, EXECUTOR_SERVICE, null);
-    InstanceResponseBlock instanceResponse;
+    DataTable instanceResponse;
     try {
       instanceResponse =
-          queryContext.isExplain() ? ServerQueryExecutorV1Impl.executeExplainQuery(plan, queryContext) : plan.execute();
+          queryContext.isExplain() ? ServerQueryExecutorV1Impl.processExplainPlanQueries(plan) : plan.execute();
     } catch (TimeoutException e) {
       throw new RuntimeException(e);
     }
@@ -222,7 +212,7 @@ public abstract class BaseQueriesTest {
     Map<ServerRoutingInstance, DataTable> dataTableMap = new HashMap<>();
     try {
       // For multi-threaded BrokerReduceService, we cannot reuse the same data-table
-      byte[] serializedResponse = instanceResponse.toDataTable().toBytes();
+      byte[] serializedResponse = instanceResponse.toBytes();
       dataTableMap.put(new ServerRoutingInstance("localhost", 1234, TableType.OFFLINE),
           DataTableFactory.getDataTable(serializedResponse));
       dataTableMap.put(new ServerRoutingInstance("localhost", 1234, TableType.REALTIME),
@@ -249,33 +239,13 @@ public abstract class BaseQueriesTest {
    * In order to query 2 distinct instances, the caller of this function should handle initializing 2 instances with
    * different index segments in the test and overriding getDistinctInstances.
    * This can be particularly useful to test statistical aggregation functions.
-   * @see StatisticalQueriesTest for an example use case.
+   * @see CovarianceQueriesTest for an example use case.
    */
   protected BrokerResponseNative getBrokerResponseForOptimizedQuery(String query, @Nullable TableConfig config,
       @Nullable Schema schema) {
     PinotQuery pinotQuery = CalciteSqlParser.compileToPinotQuery(query);
     OPTIMIZER.optimize(pinotQuery, config, schema);
     return getBrokerResponse(pinotQuery, PLAN_MAKER);
-  }
-
-  /**
-   * Helper function to call reloadSegment on an existing index directory. The segment is preprocessed using the
-   * config provided in indexLoadingConfig. It returns an immutable segment.
-   */
-  protected ImmutableSegment reloadSegment(File indexDir, IndexLoadingConfig indexLoadingConfig, Schema schema)
-      throws Exception {
-    Map<String, Object> props = new HashMap<>();
-    props.put(IndexLoadingConfig.READ_MODE_KEY, ReadMode.mmap.toString());
-    PinotConfiguration configuration = new PinotConfiguration(props);
-
-    try (SegmentDirectory segmentDirectory = SegmentDirectoryLoaderRegistry.getDefaultSegmentDirectoryLoader()
-        .load(indexDir.toURI(),
-            new SegmentDirectoryLoaderContext.Builder().setSegmentDirectoryConfigs(configuration).build());
-        SegmentPreProcessor processor = new SegmentPreProcessor(segmentDirectory, indexLoadingConfig, schema)) {
-      processor.process();
-    }
-    ImmutableSegment immutableSegment = ImmutableSegmentLoader.load(indexDir, indexLoadingConfig);
-    return immutableSegment;
   }
 
   /**
@@ -286,7 +256,7 @@ public abstract class BaseQueriesTest {
    * The caller of this function should handle initializing 2 instances with different index segments in the test and
    * overriding getDistinctInstances.
    * This can be particularly useful to test statistical aggregation functions.
-   * @see StatisticalQueriesTest for an example use case.
+   * @see CovarianceQueriesTest for an example use case.
    */
   private BrokerResponseNative getBrokerResponseDistinctInstances(PinotQuery pinotQuery, PlanMaker planMaker) {
     PinotQuery serverPinotQuery = GapfillUtils.stripGapfill(pinotQuery);
@@ -300,17 +270,17 @@ public abstract class BaseQueriesTest {
     Plan plan1 = planMaker.makeInstancePlan(instances.get(0), serverQueryContext, EXECUTOR_SERVICE, null);
     Plan plan2 = planMaker.makeInstancePlan(instances.get(1), serverQueryContext, EXECUTOR_SERVICE, null);
 
-    InstanceResponseBlock instanceResponse1;
+    DataTable instanceResponse1;
     try {
-      instanceResponse1 = queryContext.isExplain() ? ServerQueryExecutorV1Impl.executeExplainQuery(plan1, queryContext)
-          : plan1.execute();
+      instanceResponse1 =
+          queryContext.isExplain() ? ServerQueryExecutorV1Impl.processExplainPlanQueries(plan1) : plan1.execute();
     } catch (TimeoutException e) {
       throw new RuntimeException(e);
     }
-    InstanceResponseBlock instanceResponse2;
+    DataTable instanceResponse2;
     try {
-      instanceResponse2 = queryContext.isExplain() ? ServerQueryExecutorV1Impl.executeExplainQuery(plan2, queryContext)
-          : plan2.execute();
+      instanceResponse2 =
+          queryContext.isExplain() ? ServerQueryExecutorV1Impl.processExplainPlanQueries(plan2) : plan2.execute();
     } catch (TimeoutException e) {
       throw new RuntimeException(e);
     }
@@ -322,8 +292,8 @@ public abstract class BaseQueriesTest {
     Map<ServerRoutingInstance, DataTable> dataTableMap = new HashMap<>();
     try {
       // For multi-threaded BrokerReduceService, we cannot reuse the same data-table
-      byte[] serializedResponse1 = instanceResponse1.toDataTable().toBytes();
-      byte[] serializedResponse2 = instanceResponse2.toDataTable().toBytes();
+      byte[] serializedResponse1 = instanceResponse1.toBytes();
+      byte[] serializedResponse2 = instanceResponse2.toBytes();
       dataTableMap.put(new ServerRoutingInstance("localhost", 1234, TableType.OFFLINE),
           DataTableFactory.getDataTable(serializedResponse1));
       dataTableMap.put(new ServerRoutingInstance("localhost", 1234, TableType.REALTIME),

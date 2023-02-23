@@ -12,11 +12,7 @@
     },
     {
       "dataType": "STRING",
-      "name": "__metadata$offset"
-    },
-    {
-      "dataType": "STRING",
-      "name": "__metadata$recordTimestamp"
+      "name": "header$producerTimestamp"
     },
     {
       "dataType": "STRING",

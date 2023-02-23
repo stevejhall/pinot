@@ -47,7 +47,7 @@ import org.apache.pinot.core.query.aggregation.groupby.AggregationGroupByResult;
 import org.apache.pinot.core.query.aggregation.groupby.GroupKeyGenerator;
 import org.apache.pinot.core.query.request.context.QueryContext;
 import org.apache.pinot.core.util.GroupByUtils;
-import org.apache.pinot.spi.trace.Tracing;
+import org.apache.pinot.spi.exception.EarlyTerminationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,8 +58,9 @@ import org.slf4j.LoggerFactory;
  *       all threads
  */
 @SuppressWarnings("rawtypes")
-public class GroupByCombineOperator extends BaseSingleBlockCombineOperator<GroupByResultsBlock> {
+public class GroupByCombineOperator extends BaseCombineOperator<GroupByResultsBlock> {
   public static final int MAX_TRIM_THRESHOLD = 1_000_000_000;
+  public static final int MAX_GROUP_BY_KEYS_MERGED_PER_INTERRUPTION_CHECK = 10_000;
 
   private static final Logger LOGGER = LoggerFactory.getLogger(GroupByCombineOperator.class);
   private static final String EXPLAIN_NAME = "COMBINE_GROUP_BY";
@@ -78,7 +79,7 @@ public class GroupByCombineOperator extends BaseSingleBlockCombineOperator<Group
   private volatile boolean _numGroupsLimitReached;
 
   public GroupByCombineOperator(List<Operator> operators, QueryContext queryContext, ExecutorService executorService) {
-    super(null, operators, overrideMaxExecutionThreads(queryContext, operators.size()), executorService);
+    super(operators, overrideMaxExecutionThreads(queryContext, operators.size()), executorService);
 
     int minTrimSize = queryContext.getMinServerGroupTrimSize();
     if (minTrimSize > 0) {
@@ -187,16 +188,16 @@ public class GroupByCombineOperator extends BaseSingleBlockCombineOperator<Group
                 values[_numGroupByExpressions + i] = aggregationGroupByResult.getResultForGroupId(i, groupId);
               }
               _indexedTable.upsert(new Key(keys), new Record(values));
-              Tracing.ThreadAccountantOps.sampleAndCheckInterruptionPeriodically(mergedKeys);
               mergedKeys++;
+              checkMergePhaseInterruption(mergedKeys);
             }
           }
         } else {
           for (IntermediateRecord intermediateResult : intermediateRecords) {
             //TODO: change upsert api so that it accepts intermediateRecord directly
             _indexedTable.upsert(intermediateResult._key, intermediateResult._record);
-            Tracing.ThreadAccountantOps.sampleAndCheckInterruptionPeriodically(mergedKeys);
             mergedKeys++;
+            checkMergePhaseInterruption(mergedKeys);
           }
         }
       } finally {
@@ -207,13 +208,20 @@ public class GroupByCombineOperator extends BaseSingleBlockCombineOperator<Group
     }
   }
 
-  @Override
-  public void onProcessSegmentsException(Throwable t) {
-    _mergedProcessingExceptions.add(QueryException.getException(QueryException.QUERY_EXECUTION_ERROR, t));
+  // Check for thread interruption, every time after merging 10_000 keys
+  private void checkMergePhaseInterruption(int mergedKeys) {
+    if (mergedKeys % MAX_GROUP_BY_KEYS_MERGED_PER_INTERRUPTION_CHECK == 0 && Thread.interrupted()) {
+      throw new EarlyTerminationException();
+    }
   }
 
   @Override
-  public void onProcessSegmentsFinish() {
+  protected void onException(Exception e) {
+    _mergedProcessingExceptions.add(QueryException.getException(QueryException.QUERY_EXECUTION_ERROR, e));
+  }
+
+  @Override
+  protected void onFinish() {
     _operatorLatch.countDown();
   }
 
@@ -231,7 +239,7 @@ public class GroupByCombineOperator extends BaseSingleBlockCombineOperator<Group
    * </ul>
    */
   @Override
-  public BaseResultsBlock mergeResults()
+  protected BaseResultsBlock mergeResults()
       throws Exception {
     long timeoutMs = _queryContext.getEndTimeMs() - System.currentTimeMillis();
     boolean opCompleted = _operatorLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
@@ -261,5 +269,9 @@ public class GroupByCombineOperator extends BaseSingleBlockCombineOperator<Group
     }
 
     return mergedBlock;
+  }
+
+  @Override
+  protected void mergeResultsBlocks(GroupByResultsBlock mergedBlock, GroupByResultsBlock blockToMerge) {
   }
 }

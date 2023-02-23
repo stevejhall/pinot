@@ -43,7 +43,6 @@ import org.apache.helix.model.builder.HelixConfigScopeBuilder;
 import org.apache.helix.zookeeper.datamodel.serializer.ZNRecordSerializer;
 import org.apache.helix.zookeeper.impl.client.ZkClient;
 import org.apache.pinot.common.utils.helix.LeadControllerUtils;
-import org.apache.pinot.controller.ControllerConf;
 import org.apache.pinot.controller.helix.core.PinotHelixBrokerResourceOnlineOfflineStateModelGenerator;
 import org.apache.pinot.controller.helix.core.PinotHelixSegmentOnlineOfflineStateModelGenerator;
 import org.apache.pinot.spi.utils.CommonConstants;
@@ -93,22 +92,11 @@ public class HelixSetupUtils {
   }
 
   public static void setupPinotCluster(String helixClusterName, String zkPath, boolean isUpdateStateModel,
-      boolean enableBatchMessageMode, ControllerConf controllerConf) {
+      boolean enableBatchMessageMode, String leadControllerResourceRebalanceStrategy) {
     ZkClient zkClient = null;
-    int zkClientSessionConfig =
-        controllerConf.getProperty(CommonConstants.Helix.ZkClient.ZK_CLIENT_SESSION_TIMEOUT_MS_CONFIG,
-            CommonConstants.Helix.ZkClient.DEFAULT_SESSION_TIMEOUT_MS);
-    int zkClientConnectionTimeoutMs =
-        controllerConf.getProperty(CommonConstants.Helix.ZkClient.ZK_CLIENT_CONNECTION_TIMEOUT_MS_CONFIG,
-            CommonConstants.Helix.ZkClient.DEFAULT_CONNECT_TIMEOUT_MS);
     try {
-      zkClient = new ZkClient.Builder()
-          .setZkServer(zkPath)
-          .setSessionTimeout(zkClientSessionConfig)
-          .setConnectionTimeout(zkClientConnectionTimeoutMs)
-          .setZkSerializer(new ZNRecordSerializer())
-          .build();
-      zkClient.waitUntilConnected(zkClientConnectionTimeoutMs, TimeUnit.MILLISECONDS);
+      zkClient = new ZkClient.Builder().setZkServer(zkPath).setZkSerializer(new ZNRecordSerializer()).build();
+      zkClient.waitUntilConnected(ZkClient.DEFAULT_CONNECTION_TIMEOUT, TimeUnit.MILLISECONDS);
       HelixAdmin helixAdmin = new ZKHelixAdmin(zkClient);
       HelixDataAccessor helixDataAccessor =
           new ZKHelixDataAccessor(helixClusterName, new ZkBaseDataAccessor<>(zkClient));
@@ -125,7 +113,7 @@ public class HelixSetupUtils {
 
       // Add lead controller resource if needed
       createLeadControllerResourceIfNeeded(helixClusterName, helixAdmin, configAccessor, enableBatchMessageMode,
-          controllerConf.getLeadControllerResourceRebalanceStrategy());
+          leadControllerResourceRebalanceStrategy);
     } finally {
       if (zkClient != null) {
         zkClient.close();

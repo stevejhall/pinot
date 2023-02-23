@@ -40,7 +40,6 @@ import org.apache.pinot.common.proto.PinotQueryServerGrpc;
 import org.apache.pinot.common.proto.Server.ServerRequest;
 import org.apache.pinot.common.proto.Server.ServerResponse;
 import org.apache.pinot.common.utils.TlsUtils;
-import org.apache.pinot.core.operator.blocks.InstanceResponseBlock;
 import org.apache.pinot.core.operator.streaming.StreamingResponseUtils;
 import org.apache.pinot.core.query.executor.QueryExecutor;
 import org.apache.pinot.core.query.request.ServerQueryRequest;
@@ -69,7 +68,8 @@ public class GrpcQueryServer extends PinotQueryServerGrpc.PinotQueryServerImplBa
     if (tlsConfig != null) {
       try {
         _server = NettyServerBuilder.forPort(port).sslContext(buildGRpcSslContext(tlsConfig))
-            .maxInboundMessageSize(config.getMaxInboundMessageSizeBytes()).addService(this).build();
+            .maxInboundMessageSize(config.getMaxInboundMessageSizeBytes())
+            .addService(this).build();
       } catch (Exception e) {
         throw new RuntimeException("Failed to start secure grpcQueryServer", e);
       }
@@ -144,9 +144,9 @@ public class GrpcQueryServer extends PinotQueryServerGrpc.PinotQueryServerImplBa
     }
 
     // Process the query
-    InstanceResponseBlock instanceResponse;
+    DataTable dataTable;
     try {
-      instanceResponse = _queryExecutor.execute(queryRequest, _executorService, responseObserver);
+      dataTable = _queryExecutor.processQuery(queryRequest, _executorService, responseObserver);
     } catch (Exception e) {
       LOGGER.error("Caught exception while processing request {}: {} from broker: {}", queryRequest.getRequestId(),
           queryRequest.getQueryContext(), queryRequest.getBrokerId(), e);
@@ -155,19 +155,18 @@ public class GrpcQueryServer extends PinotQueryServerGrpc.PinotQueryServerImplBa
       return;
     }
 
-    ServerResponse serverResponse;
+    ServerResponse response;
     try {
-      DataTable dataTable = instanceResponse.toDataTable();
-      serverResponse = queryRequest.isEnableStreaming() ? StreamingResponseUtils.getMetadataResponse(dataTable)
+      response = queryRequest.isEnableStreaming() ? StreamingResponseUtils.getMetadataResponse(dataTable)
           : StreamingResponseUtils.getNonStreamingResponse(dataTable);
     } catch (Exception e) {
-      LOGGER.error("Caught exception while serializing response for request {}: {} from broker: {}",
+      LOGGER.error("Caught exception while constructing response from data table for request {}: {} from broker: {}",
           queryRequest.getRequestId(), queryRequest.getQueryContext(), queryRequest.getBrokerId(), e);
       _serverMetrics.addMeteredGlobalValue(ServerMeter.RESPONSE_SERIALIZATION_EXCEPTIONS, 1);
       responseObserver.onError(Status.INTERNAL.withCause(e).asException());
       return;
     }
-    responseObserver.onNext(serverResponse);
+    responseObserver.onNext(response);
     responseObserver.onCompleted();
   }
 }

@@ -26,7 +26,6 @@ import {
   makeStyles,
   useTheme,
 } from '@material-ui/core/styles';
-import ComponentLoader from './ComponentLoader';
 import Dialog from '@material-ui/core/Dialog';
 import Table from '@material-ui/core/Table';
 import TableBody from '@material-ui/core/TableBody';
@@ -35,7 +34,7 @@ import TableContainer from '@material-ui/core/TableContainer';
 import TableHead from '@material-ui/core/TableHead';
 import TableRow from '@material-ui/core/TableRow';
 import { TablePagination, Tooltip } from '@material-ui/core';
-import {TableData, TableSortFunction} from 'Models';
+import { TableData } from 'Models';
 import IconButton from '@material-ui/core/IconButton';
 import FirstPageIcon from '@material-ui/icons/FirstPage';
 import KeyboardArrowLeft from '@material-ui/icons/KeyboardArrowLeft';
@@ -47,7 +46,6 @@ import { Link } from 'react-router-dom';
 import Chip from '@material-ui/core/Chip';
 import { get, has, orderBy } from 'lodash';
 import app_state from '../app_state';
-import { sortBytes, sortNumberOfSegments } from '../utils/SortFunctions'
 import Utils from '../utils/Utils';
 import TableToolbar from './TableToolbar';
 import SimpleAccordion from './SimpleAccordion';
@@ -73,15 +71,6 @@ type Props = {
   },
   tooltipData?: string[]
 };
-
-// These sort functions are applied to any columns with these names. Otherwise, we just
-// sort on the raw data. Ideally users of this class would pass in custom sort functions
-// for their columns, but this pattern already existed, so we're at least making the
-// improvement to pull this out to a common variable.
-let staticSortFunctions: Map<string, TableSortFunction> = new Map()
-staticSortFunctions.set("Number of Segments", sortNumberOfSegments);
-staticSortFunctions.set("Estimated Size", sortBytes);
-staticSortFunctions.set("Reported Size", sortBytes);
 
 const StyledTableRow = withStyles((theme) =>
   createStyles({
@@ -281,22 +270,7 @@ export default function CustomizedTables({
   accordionToggleObject,
   tooltipData
 }: Props) {
-  // Separate the initial and final data into two separated state variables.
-  // This way we can filter and sort the data without affecting the original data.
-  // If the component receives new data, we can simply set the new data to the initial data,
-  // and the filters and sorts will be applied to the new data.
-  const [initialData, setInitialData] = React.useState(data);
   const [finalData, setFinalData] = React.useState(Utils.tableFormat(data));
-  React.useEffect( () => {
-    setInitialData(data);
-  }, [data]);
-  // We do not use data.isLoading directly in the renderer because there's a gap between data
-  // changing and finalData being set. Without this, there's a flicker where we go from
-  // loading -> no records found -> not loading + data.
-  const [isLoading, setIsLoading] = React.useState(false);
-  React.useEffect( () => {
-    setIsLoading(data.isLoading || false);
-  }, [finalData]);
 
   const [order, setOrder] = React.useState(false);
   const [columnClicked, setColumnClicked] = React.useState('');
@@ -322,9 +296,9 @@ export default function CustomizedTables({
 
   const filterSearchResults = React.useCallback((str: string) => {
     if (str === '') {
-      setFinalData(Utils.tableFormat(data));
+      setFinalData(finalData);
     } else {
-      const filteredRescords = initialData.records.filter((record) => {
+      const filteredRescords = data.records.filter((record) => {
         const searchFound = record.find(
           (cell) => cell.toString().toLowerCase().indexOf(str) > -1
         );
@@ -335,7 +309,7 @@ export default function CustomizedTables({
       });
       setFinalData(filteredRescords);
     }
-  }, [initialData, setFinalData]);
+  }, [data, setFinalData]);
 
   React.useEffect(() => {
     clearTimeout(timeoutId.current);
@@ -348,8 +322,12 @@ export default function CustomizedTables({
     };
   }, [search, timeoutId, filterSearchResults]);
 
+  React.useCallback(()=>{
+    setFinalData(Utils.tableFormat(data));
+  }, [data]);
+
   const styleCell = (str: string) => {
-    if (str.toLowerCase() === 'good' || str.toLowerCase() === 'online' || str.toLowerCase() === 'alive' || str.toLowerCase() === 'true') {
+    if (str === 'Good' || str.toLowerCase() === 'online' || str.toLowerCase() === 'alive' || str.toLowerCase() === 'true') {
       return (
         <StyledChip
           label={str}
@@ -358,7 +336,7 @@ export default function CustomizedTables({
         />
       );
     }
-    if (str.toLocaleLowerCase() === 'bad' || str.toLowerCase() === 'offline' || str.toLowerCase() === 'dead' || str.toLowerCase() === 'false') {
+    if (str === 'Bad' || str.toLowerCase() === 'offline' || str.toLowerCase() === 'dead' || str.toLowerCase() === 'false') {
       return (
         <StyledChip
           label={str}
@@ -367,7 +345,7 @@ export default function CustomizedTables({
         />
       );
     }
-    if (str.toLowerCase() === 'consuming' || str.toLocaleLowerCase() === "partial" || str.toLocaleLowerCase() === "updating" ) {
+    if (str.toLowerCase() === 'consuming') {
       return (
         <StyledChip
           label={str}
@@ -394,9 +372,6 @@ export default function CustomizedTables({
         />
       );
     }
-    if (str.search('\n') !== -1) {
-      return (<pre>{str.toString()}</pre>);
-    }
     return (<span>{str.toString()}</span>);
   };
 
@@ -406,11 +381,6 @@ export default function CustomizedTables({
 
   const makeCell = (cellData, rowIndex) => {
     if (Object.prototype.toString.call(cellData) === '[object Object]') {
-      // render custom table cell
-      if (cellData && cellData.customRenderer) {
-        return <>{cellData.customRenderer}</>;
-      }
-
       if (has(cellData, 'component') && cellData.component) {
 
 
@@ -472,14 +442,19 @@ export default function CustomizedTables({
           <Table className={classes.table} size="small" stickyHeader={isSticky}>
             <TableHead>
               <TableRow>
-                {data.columns && data.columns.map((column, index) => (
+                {data.columns.map((column, index) => (
                   <StyledTableCell
                     className={classes.head}
                     key={index}
                     onClick={() => {
-                      if (staticSortFunctions.has(column)) {
-                        finalData.sort((a, b) => staticSortFunctions.get(column)(a, b, column, index, order));
-                        setFinalData(finalData);
+                      if(column === 'Number of Segments'){
+                        const data = finalData.sort((a,b)=>{
+                          const aSegmentInt = parseInt(a[column+app_state.columnNameSeparator+index]);
+                          const bSegmentInt = parseInt(b[column+app_state.columnNameSeparator+index]);
+                          const result = order ? (aSegmentInt > bSegmentInt) : (aSegmentInt < bSegmentInt);
+                          return result ? 1 : -1;
+                        });
+                        setFinalData(data);
                       } else {
                         setFinalData(orderBy(finalData, column+app_state.columnNameSeparator+index, order ? 'asc' : 'desc'));
                       }
@@ -511,8 +486,7 @@ export default function CustomizedTables({
               </TableRow>
             </TableHead>
             <TableBody className={classes.body}>
-              {isLoading ? <ComponentLoader /> : (
-                finalData.length === 0 ? (
+              {finalData.length === 0 ? (
                 <TableRow>
                   <StyledTableCell
                     className={classes.nodata}
@@ -549,7 +523,7 @@ export default function CustomizedTables({
                       })}
                     </StyledTableRow>
                   ))
-              ))}
+              )}
             </TableBody>
           </Table>
         </TableContainer>

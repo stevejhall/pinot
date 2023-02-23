@@ -33,7 +33,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.pinot.common.utils.HashUtil;
 import org.apache.pinot.segment.local.dedup.PartitionDedupMetadataManager;
 import org.apache.pinot.segment.local.segment.index.datasource.ImmutableDataSource;
-import org.apache.pinot.segment.local.segment.readers.PinotSegmentColumnReader;
 import org.apache.pinot.segment.local.segment.readers.PinotSegmentRecordReader;
 import org.apache.pinot.segment.local.startree.v2.store.StarTreeIndexContainer;
 import org.apache.pinot.segment.local.upsert.PartitionUpsertMetadataManager;
@@ -73,6 +72,7 @@ public class ImmutableSegmentImpl implements ImmutableSegment {
   // For upsert
   private PartitionUpsertMetadataManager _partitionUpsertMetadataManager;
   private ThreadSafeMutableRoaringBitmap _validDocIds;
+  private PinotSegmentRecordReader _pinotSegmentRecordReader;
 
   public ImmutableSegmentImpl(SegmentDirectory segmentDirectory, SegmentMetadataImpl segmentMetadata,
       Map<String, ColumnIndexContainer> columnIndexContainerMap,
@@ -124,10 +124,7 @@ public class ImmutableSegmentImpl implements ImmutableSegment {
     File validDocIdsSnapshotFile = getValidDocIdsSnapshotFile();
     try {
       if (validDocIdsSnapshotFile.exists()) {
-        if (!FileUtils.deleteQuietly(validDocIdsSnapshotFile)) {
-          LOGGER.warn("Cannot delete old valid doc ids snapshot file: {}, skipping", validDocIdsSnapshotFile);
-          return;
-        }
+        FileUtils.delete(validDocIdsSnapshotFile);
       }
       try (DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(validDocIdsSnapshotFile))) {
         validDocIds.serialize(dataOutputStream);
@@ -144,10 +141,7 @@ public class ImmutableSegmentImpl implements ImmutableSegment {
     File validDocIdsSnapshotFile = getValidDocIdsSnapshotFile();
     if (validDocIdsSnapshotFile.exists()) {
       try {
-        if (!FileUtils.deleteQuietly(validDocIdsSnapshotFile)) {
-          LOGGER.warn("Cannot delete old valid doc ids snapshot file: {}, skipping", validDocIdsSnapshotFile);
-          return;
-        }
+        FileUtils.delete(validDocIdsSnapshotFile);
         LOGGER.info("Deleted valid doc ids snapshot for segment: {}", getSegmentName());
       } catch (Exception e) {
         LOGGER.warn("Caught exception while deleting valid doc ids snapshot file: {}, skipping",
@@ -247,14 +241,7 @@ public class ImmutableSegmentImpl implements ImmutableSegment {
     if (_partitionDedupMetadataManager != null) {
       _partitionDedupMetadataManager.removeSegment(this);
     }
-    // StarTreeIndexContainer refers to other column index containers, so close it firstly.
-    if (_starTreeIndexContainer != null) {
-      try {
-        _starTreeIndexContainer.close();
-      } catch (IOException e) {
-        LOGGER.error("Failed to close star-tree. Continuing with error.", e);
-      }
-    }
+
     for (Map.Entry<String, ColumnIndexContainer> entry : _indexContainerMap.entrySet()) {
       try {
         entry.getValue().close();
@@ -266,6 +253,20 @@ public class ImmutableSegmentImpl implements ImmutableSegment {
       _segmentDirectory.close();
     } catch (Exception e) {
       LOGGER.error("Failed to close segment directory: {}. Continuing with error.", _segmentDirectory, e);
+    }
+    if (_starTreeIndexContainer != null) {
+      try {
+        _starTreeIndexContainer.close();
+      } catch (IOException e) {
+        LOGGER.error("Failed to close star-tree. Continuing with error.", e);
+      }
+    }
+    if (_pinotSegmentRecordReader != null) {
+      try {
+        _pinotSegmentRecordReader.close();
+      } catch (IOException e) {
+        LOGGER.error("Failed to close record reader. Continuing with error.", e);
+      }
     }
   }
 
@@ -282,22 +283,31 @@ public class ImmutableSegmentImpl implements ImmutableSegment {
 
   @Override
   public GenericRow getRecord(int docId, GenericRow reuse) {
-    try (PinotSegmentRecordReader recordReader = new PinotSegmentRecordReader()) {
-      recordReader.init(this);
-      recordReader.getRecord(docId, reuse);
+    try {
+      if (_pinotSegmentRecordReader == null) {
+        _pinotSegmentRecordReader = new PinotSegmentRecordReader();
+        _pinotSegmentRecordReader.init(this);
+      }
+      _pinotSegmentRecordReader.getRecord(reuse, docId);
       return reuse;
     } catch (Exception e) {
-      throw new RuntimeException("Caught exception while reading record for docId: " + docId, e);
+      throw new RuntimeException(
+          String.format("Failed to use PinotSegmentRecordReader to read immutable segment for docId: %d", docId), e);
     }
   }
 
   @Override
   public Object getValue(int docId, String column) {
-    try (PinotSegmentColumnReader columnReader = new PinotSegmentColumnReader(this, column)) {
-      return columnReader.getValue(docId);
+    try {
+      if (_pinotSegmentRecordReader == null) {
+        _pinotSegmentRecordReader = new PinotSegmentRecordReader();
+        _pinotSegmentRecordReader.init(this);
+      }
+      return _pinotSegmentRecordReader.getValue(docId, column);
     } catch (Exception e) {
       throw new RuntimeException(
-          String.format("Caught exception while reading value for docId: %d, column: %s", docId, column), e);
+          String.format("Failed to use PinotSegmentRecordReader to read value from immutable segment"
+              + " for docId: %d, column: %s", docId, column), e);
     }
   }
 }

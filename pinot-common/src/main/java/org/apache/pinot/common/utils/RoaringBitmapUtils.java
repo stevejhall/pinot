@@ -20,7 +20,6 @@ package org.apache.pinot.common.utils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import org.roaringbitmap.ImmutableBitmapDataProvider;
 import org.roaringbitmap.RoaringBitmap;
 
 
@@ -28,7 +27,7 @@ public class RoaringBitmapUtils {
   private RoaringBitmapUtils() {
   }
 
-  public static byte[] serialize(ImmutableBitmapDataProvider bitmap) {
+  public static byte[] serialize(RoaringBitmap bitmap) {
     byte[] bytes = new byte[bitmap.serializedSizeInBytes()];
     ByteBuffer byteBuffer = ByteBuffer.wrap(bytes);
     bitmap.serialize(byteBuffer);

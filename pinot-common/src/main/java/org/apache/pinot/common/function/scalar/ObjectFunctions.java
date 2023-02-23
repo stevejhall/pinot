@@ -20,24 +20,22 @@ package org.apache.pinot.common.function.scalar;
 
 import javax.annotation.Nullable;
 import org.apache.pinot.spi.annotations.ScalarFunction;
-import org.apache.pinot.spi.utils.BooleanUtils;
-
 
 public class ObjectFunctions {
   private ObjectFunctions() {
   }
 
-  @ScalarFunction(nullableParameters = true, names = {"isNull", "is_null"})
+  @ScalarFunction(nullableParameters = true)
   public static boolean isNull(@Nullable Object obj) {
     return obj == null;
   }
 
-  @ScalarFunction(nullableParameters = true, names = {"isNotNull", "is_not_null"})
+  @ScalarFunction(nullableParameters = true)
   public static boolean isNotNull(@Nullable Object obj) {
     return !isNull(obj);
   }
 
-  @ScalarFunction(nullableParameters = true, names = {"isDistinctFrom", "is_distinct_from"})
+  @ScalarFunction(nullableParameters = true)
   public static boolean isDistinctFrom(@Nullable Object obj1, @Nullable Object obj2) {
     if (obj1 == null && obj2 == null) {
       return false;
@@ -48,7 +46,7 @@ public class ObjectFunctions {
     return !obj1.equals(obj2);
   }
 
-  @ScalarFunction(nullableParameters = true, names = {"isNotDistinctFrom", "is_not_distinct_from"})
+  @ScalarFunction(nullableParameters = true)
   public static boolean isNotDistinctFrom(@Nullable Object obj1, @Nullable Object obj2) {
     return !isDistinctFrom(obj1, obj2);
   }
@@ -95,47 +93,12 @@ public class ObjectFunctions {
   }
 
   @Nullable
-  @ScalarFunction(nullableParameters = true, names = {"case", "caseWhen", "case_when"})
-  public static Object caseWhen(boolean c1, @Nullable Object o1, @Nullable Object oe) {
-    return caseWhenVar(c1, o1, oe);
-  }
-
-  @Nullable
-  @ScalarFunction(nullableParameters = true, names = {"case", "caseWhen", "case_when"})
-  public static Object caseWhen(boolean c1, @Nullable Object o1, boolean c2, @Nullable Object o2, @Nullable Object oe) {
-    return caseWhenVar(c1, o1, c2, o2, oe);
-  }
-
-  @Nullable
-  @ScalarFunction(nullableParameters = true, names = {"case", "caseWhen", "case_when"})
-  public static Object caseWhen(boolean c1, @Nullable Object o1, boolean c2, @Nullable Object o2, boolean c3,
-                                @Nullable Object o3, @Nullable Object oe) {
-    return caseWhenVar(c1, o1, c2, o2, c3, o3, oe);
-  }
-
-  @Nullable
-  @ScalarFunction(nullableParameters = true, names = {"case", "caseWhen", "case_when"})
-  public static Object caseWhen(boolean c1, @Nullable Object o1, boolean c2, @Nullable Object o2, boolean c3,
-                                @Nullable Object o3, boolean c4, @Nullable Object o4, @Nullable Object oe) {
-    return caseWhenVar(c1, o1, c2, o2, c3, o3, c4, o4, oe);
-  }
-
-  @Nullable
-  @ScalarFunction(nullableParameters = true, names = {"case", "caseWhen", "case_when"})
-  public static Object caseWhen(boolean c1, @Nullable Object o1, boolean c2, @Nullable Object o2, boolean c3,
-                                @Nullable Object o3, boolean c4, @Nullable Object o4, boolean c5, @Nullable Object o5,
-                                @Nullable Object oe) {
-    return caseWhenVar(c1, o1, c2, o2, c3, o3, c4, o4, c5, o5, oe);
-  }
-
-  @Nullable
-  private static Object caseWhenVar(Object... objs) {
-    for (int i = 0; i < objs.length - 1; i += 2) {
-      if (BooleanUtils.toBoolean(objs[i])) {
-        return objs[i + 1];
+  private static Object coalesce(Object... objects) {
+    for (Object o : objects) {
+      if (o != null) {
+        return o;
       }
     }
-    // with or without else statement.
-    return objs.length % 2 == 0 ? null : objs[objs.length - 1];
+    return null;
   }
 }
