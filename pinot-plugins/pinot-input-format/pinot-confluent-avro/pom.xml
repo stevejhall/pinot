@@ -87,6 +87,7 @@
           <groupId>org.apache.kafka</groupId>
           <artifactId>kafka-clients</artifactId>
         </exclusion>
+        <!--
         <exclusion>
           <groupId>org.slf4j</groupId>
           <artifactId>slf4j-api</artifactId>
@@ -99,14 +100,38 @@
           <groupId>org.apache.zookeeper</groupId>
           <artifactId>zookeeper</artifactId>
         </exclusion>
+        -->
+        <!--
         <exclusion>
           <groupId>io.swagger</groupId>
           <artifactId>swagger-core</artifactId>
         </exclusion>
         <exclusion>
           <groupId>io.confluent</groupId>
+          <artifactId>kafka-avro-serializer</artifactId>
+        </exclusion>
+        -->
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>io.confluent</groupId>
+      <artifactId>kafka-avro-serializer</artifactId>
+      <version>6.1.8-nike</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.kafka</groupId>
+          <artifactId>kafka-clients</artifactId>
+        </exclusion>
+        <!--
+        <exclusion>
+          <groupId>io.confluent</groupId>
           <artifactId>kafka-schema-registry-client</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>io.confluent</groupId>
+          <artifactId>kafka-avro-serializer</artifactId>
+        </exclusion>
+        -->
       </exclusions>
     </dependency>
   </dependencies>

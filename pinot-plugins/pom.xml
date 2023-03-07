@@ -143,6 +143,11 @@
                       <pattern>io.strimzi</pattern>
                       <shadedPattern>${shade.prefix}.io.strimzi</shadedPattern>
                     </relocation>
+                    <!-- Adding 3/2/2023 after custom schema registry client-->
+                    <relocation>
+                      <pattern>io.confluent.kafka</pattern>
+                      <shadedPattern>${shade.prefix}.io.confluent.kafka</shadedPattern>
+                    </relocation>
                     <!-- End Added by Nike -->
                     <relocation>
                       <pattern>org.apache.kafka</pattern>

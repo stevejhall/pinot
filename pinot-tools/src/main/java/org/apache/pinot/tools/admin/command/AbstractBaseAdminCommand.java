@@ -43,7 +43,7 @@ import org.apache.pinot.core.auth.BasicAuthUtils;
 import org.apache.pinot.spi.auth.AuthProvider;
 import org.apache.pinot.tools.AbstractBaseCommand;
 import org.apache.pinot.tools.utils.PinotConfigUtils;
-
+import org.locationtech.jts.util.AssertionFailedException;
 
 /**
  * Super class for all the commands.
@@ -99,19 +99,38 @@ public class AbstractBaseAdminCommand extends AbstractBaseCommand {
     }
 
     try {
+      InputStream is = conn.getInputStream();
       return readInputStream(conn.getInputStream());
     } catch (Exception e) {
-      return readInputStream(conn.getErrorStream());
+      try {
+        return readInputStream(conn.getErrorStream());
+      } catch (Exception e1) {
+        throw new RuntimeException(
+          String.format(
+            "Failed to send request and encountered error when reading errorStream"
+            + " request method: %s, URL: %s", requestMethod, urlString), e1
+        );
+      }
     }
   }
 
   private static String readInputStream(InputStream inputStream)
       throws IOException {
-    final BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"));
+    if(inputStream == null) {
+      throw new AssertionFailedException("Expected inputStream");
+    }
+
     final StringBuilder sb = new StringBuilder();
-    String line;
-    while ((line = reader.readLine()) != null) {
-      sb.append(line);
+    try {
+      final BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"));
+
+      String line;
+      while ((line = reader.readLine()) != null) {
+        sb.append(line);
+      }
+
+    } catch (Exception e) {
+        throw new RuntimeException("Pinot Base Admin Command encountered error reading inputstream", e);
     }
     return sb.toString();
   }

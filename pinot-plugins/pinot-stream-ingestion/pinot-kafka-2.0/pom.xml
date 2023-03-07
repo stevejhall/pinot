@@ -52,6 +52,29 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <!-- Added by Nike for Schema Registry Auth -->
+    <dependency>
+      <groupId>io.confluent</groupId>
+      <artifactId>kafka-schema-registry-client</artifactId>
+      <version>6.1.8-nike</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.kafka</groupId>
+          <artifactId>kafka-clients</artifactId>
+        </exclusion>
+<!--
+        <exclusion>
+          <groupId>io.confluent</groupId>
+          <artifactId>kafka-avro-serializer</artifactId>
+        </exclusion>
+
+        <exclusion>
+          <groupId>io.swagger</groupId>
+          <artifactId>swagger-core</artifactId>
+        </exclusion>
+        -->
+      </exclusions>
+    </dependency>
     <!-- Kafka  -->
     <dependency>
       <groupId>org.apache.kafka</groupId>

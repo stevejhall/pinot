@@ -412,5 +412,33 @@
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
     </dependency>
+    <dependency>
+      <groupId>io.confluent</groupId>
+      <artifactId>kafka-schema-registry-client</artifactId>
+      <version>6.1.8-nike</version>
+      <exclusions>
+        <!--
+        <exclusion>
+          <groupId>io.confluent</groupId>
+          <artifactId>kafka-schema-registry-client</artifactId>
+        </exclusion>
+        -->
+        <exclusion>
+          <groupId>org.apache.kafka</groupId>
+          <artifactId>kafka-clients</artifactId>
+        </exclusion>
+        <!--
+        <exclusion>
+          <groupId>io.confluent</groupId>
+          <artifactId>kafka-schema-serializer</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>io.confluent</groupId>
+          <artifactId>kafka-avro-serializer</artifactId>
+        </exclusion>
+        -->
+      </exclusions>
+    </dependency>
   </dependencies>
+
 </project>
