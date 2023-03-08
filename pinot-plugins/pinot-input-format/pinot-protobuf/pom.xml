@@ -41,9 +41,15 @@
     <phase.prop>package</phase.prop>
   </properties>
   <repositories>
+    <!--
     <repository>
       <id>confluent</id>
       <url>https://packages.confluent.io/maven/</url>
+    </repository>
+    -->
+    <repository>
+      <id>artifactory</id>
+      <url>https://artifactory.nike.com/artifactory/all-repos</url>
     </repository>
   </repositories>
   <dependencies>
