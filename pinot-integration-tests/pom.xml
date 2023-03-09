@@ -40,6 +40,13 @@
     <testcontainers.version>1.17.3</testcontainers.version>
   </properties>
 
+  <repositories>
+    <repository>
+      <id>artifactory</id>
+      <url>https://artifactory.nike.com/artifactory/all-repos</url>
+    </repository>
+  </repositories>
+
   <build>
     <plugins>
       <plugin>

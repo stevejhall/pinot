@@ -34,6 +34,12 @@
   <properties>
     <pinot.root>${basedir}/..</pinot.root>
   </properties>
+  <repositories>
+    <repository>
+      <id>artifactory</id>
+      <url>https://artifactory.nike.com/artifactory/all-repos</url>
+    </repository>
+  </repositories>
   <dependencies>
     <dependency>
       <groupId>org.apache.pinot</groupId>

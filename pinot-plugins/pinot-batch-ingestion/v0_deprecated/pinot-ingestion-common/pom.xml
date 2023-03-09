@@ -34,14 +34,12 @@
   <name>Pinot Ingestion Common</name>
   <url>https://pinot.apache.org/</url>
   <repositories>
-    <!--
    <repository>
      <id>confluent</id>
      <url>https://packages.confluent.io/maven/</url>
      <releases><enabled>true</enabled></releases>
      <snapshots><enabled>true</enabled></snapshots>
    </repository>
-   -->
     <repository>
       <id>artifactory</id>
       <url>https://artifactory.nike.com/artifactory/all-repos</url>
