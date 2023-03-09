@@ -74,7 +74,8 @@ public class KafkaDataServerStartable implements StreamDataServerStartable {
     logDir.mkdirs();
 
     props.put("zookeeper.session.timeout.ms", "60000");
-    _serverStartable = new KafkaServer(new KafkaConfig(props), Time.SYSTEM, Option.empty(), false);
+    Option<String> threadNamePrefix = Option.empty();
+    _serverStartable = new KafkaServer(new KafkaConfig(props), Time.SYSTEM, threadNamePrefix, false);
     final Map<String, Object> config = new HashMap<>();
     config.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:" + _port);
     config.put(AdminClientConfig.CLIENT_ID_CONFIG, "Kafka2AdminClient-" + UUID.randomUUID().toString());
