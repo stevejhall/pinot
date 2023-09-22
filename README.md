@@ -124,3 +124,4 @@ Check out [Pinot documentation](https://docs.pinot.apache.org/) for a complete d
 
 ## License
 Apache Pinot is under [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0)
+
